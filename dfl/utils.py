@@ -47,7 +47,17 @@ def getRandomProbabilityDistribution(m):
     assert np.sum(diffs) == 1 and len(diffs) == m
     return diffs
 
-def generateRandomTMatrix(n_benefs, n_states, R_data):
+def addRandomNoise(T_data, scale=0.8):
+    n_benefs, n_states, n_actions, n_states = T_data.shape
+    noise = np.random.randn(n_benefs, n_states, n_actions) * scale
+    noisy_T_data = T_data
+    noisy_T_data[:, :, :, 0] = noisy_T_data[:, :, :, 0] + noise
+    noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
+    noisy_T_data = np.where(noisy_T_data < 0, 0, noisy_T_data)
+    noisy_T_data = np.where(noisy_T_data > 1, 1, noisy_T_data)
+    return noisy_T_data
+
+def generateRandomTMatrix(n_benefs, n_states, R_data, dist_shift=False):
 
     """
     This function is to replace the function in armman/simulator.py to support multiple states
@@ -56,7 +66,6 @@ def generateRandomTMatrix(n_benefs, n_states, R_data):
     T[beneficiary_number][current_state][action][next_state]
     action=0 denotes passive action, a=1 is active action
     """
-        
     T = np.zeros((n_benefs, n_states, 2, n_states))
     for i in range(n_benefs):
         for j in range(n_states):
@@ -150,7 +159,10 @@ class DiffTopK(object):
         Returns: a vector of size ()
 
         """
-        bs, n = scores.shape # Batch version
+        if len(scores.shape) != 2:
+            bs, n, _ = scores.shape
+        else:
+            bs, n = scores.shape # Batch version
         self.bs, self.n = bs, n
         scores = tf.reshape(scores, [bs, n, 1]) 
 
@@ -243,7 +255,10 @@ class DiffTopK(object):
         return tf.stop_gradient(Gamma), gradient_function
 
 def getSoftTopk(a, k):
-    bs, n = a.shape
+    if len(a.shape) == 2:
+        bs, n = a.shape
+    else:
+        bs, n, _ = a.shape
     diffTopK = DiffTopK(k=k)
     gamma = diffTopK(-a)
     probs = gamma[:,:,0].numpy() * n / k

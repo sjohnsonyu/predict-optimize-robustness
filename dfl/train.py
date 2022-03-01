@@ -27,6 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--instances', default=10, type=int, help='num instances')
     parser.add_argument('--ope', default='sim', type=str, help='importance sampling (IS) or simulation-based (sim).')
     parser.add_argument('--seed', default=0, type=int, help='random seed for synthetic data generation.')
+    parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
   
 
     args = parser.parse_args()
@@ -41,6 +42,7 @@ if __name__ == '__main__':
     target_policy_name = 'soft-whittle'
     beh_policy_name    = 'random'
     TS_WEIGHT=0.1
+    noise_scale = args.noise_scale
 
     # Environment setup
     env = args.env
@@ -71,13 +73,14 @@ if __name__ == '__main__':
         # dataset generation
         n_instances = args.instances
         # Seed are set inside generateDataset function
-        full_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
+        train_val_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
+        test_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed, dist_shift=True, noise_scale=noise_scale)
         single_trajectory = False
 
 
-    train_dataset = full_dataset[:int(n_instances*0.7)]
-    val_dataset   = full_dataset[int(n_instances*0.7):int(n_instances*0.8)]
-    test_dataset  = full_dataset[int(n_instances*0.8):]
+    train_dataset = train_val_dataset[:int(n_instances*0.8)]
+    val_dataset   = train_val_dataset[int(n_instances*0.8):]
+    # test_dataset  = test_dataset[int(n_instances*0.8):]
 
     dataset_list = [('train', train_dataset), ('val', val_dataset), ('test', test_dataset)]
 
@@ -92,19 +95,25 @@ if __name__ == '__main__':
     overall_loss = {'train': [], 'test': [], 'val': []} # two-stage loss
     overall_ope = {'train': [], 'test': [], 'val': []} # OPE IS
     overall_ope_sim = {'train': [], 'test': [], 'val': []} # OPE simulation
+    overall_ope_sim_regret = {'train': [], 'test': [], 'val': []}
+    overall_ope_is_regret = {'train': [], 'test': [], 'val': []}
     for epoch in range(total_epoch+1):
         for mode, dataset in dataset_list:
             loss_list = []
             ope_list = [] # OPE IS
             ess_list = []
             ope_sim_list = [] # OPE simulation
+            optimal_ope_is_regret_list = [] # OPE IS
+            optimal_ope_sim_regret_list = [] # OPE simulation
+
             if mode == 'train':
                 dataset = tqdm.tqdm(dataset)
 
-            for (feature, _, raw_R_data, traj, ope_simulator, _, state_record, action_record, reward_record) in dataset:
+            for (feature, ground_truth_T_data, raw_R_data, traj, ope_simulator, _, state_record, action_record, reward_record) in dataset:
                 feature = tf.constant(feature, dtype=tf.float32)
                 # label   = tf.constant(label, dtype=tf.float32)
                 raw_R_data = tf.constant(raw_R_data, dtype=tf.float32)
+                ground_truth_T_data = tf.constant(ground_truth_T_data, dtype=tf.float32)
 
                 with tf.GradientTape() as tape:
                     prediction = model(feature) # Transition probabilities
@@ -122,6 +131,9 @@ if __name__ == '__main__':
                     # start_time = time.time()
                     loss = twoStageNLLLoss(traj, T_data, beh_policy_name) # - twoStageNLLLoss(traj, label, beh_policy_name) # Two-stage custom NLL loss
                     # print('two stage loss time:', time.time() - start_time)
+ 
+                    # general idea: use ground truth test set, calculate own whittle
+                    # calculate rewards and then subtract actual in order to obtain regret
 
                     # Batch Whittle index computation
                     # start_time = time.time()
@@ -149,6 +161,17 @@ if __name__ == '__main__':
                     ts_weight = TS_WEIGHT
                     performance = -ope * (1 - ts_weight) + loss * ts_weight
 
+                    if mode == 'test':
+                        print('entering')
+                        optimal_w = newWhittleIndex(ground_truth_T_data, R_data)
+                        optimal_ope_IS, optimal_ess = opeIS_parallel(state_record, action_record, reward_record, optimal_w, n_benefs, L, K, n_trials, gamma,
+                            target_policy_name, beh_policy_name, single_trajectory=single_trajectory)
+                        optimal_ope_sim = ope_simulator(optimal_w, K)
+                        optimal_ope_sim_regret_list.append(optimal_ope_sim - ope_sim)
+                        optimal_ope_is_regret_list.append(optimal_ope_IS - ope_IS)
+
+
+
                 # backpropagation
                 if mode == 'train' and epoch<total_epoch and epoch>0:
                     if training_mode == 'two-stage':
@@ -165,14 +188,20 @@ if __name__ == '__main__':
                 ess_list.append(tf.reduce_mean(ess))
 
             print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list)}, average ope (IS) {np.mean(ope_list)}, average ope (sim) {np.mean(ope_sim_list)}, average ess {np.mean(ess_list)}')
-            
+            if mode == 'test':
+                print(f'average ope (IS) regret {np.mean(optimal_ope_is_regret_list)}, average ope (sim) regret {np.mean(optimal_ope_sim_regret_list)}')
+            # import pdb; pdb.set_trace()
             overall_loss[mode].append(np.mean(loss_list))
             overall_ope[mode].append(np.mean(ope_list))
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
+            if mode == 'test':
+                overall_ope_sim_regret[mode].append(np.mean(optimal_ope_sim_regret_list))
+                overall_ope_is_regret[mode].append(np.mean(optimal_ope_is_regret_list))
 
     
     if not(args.sv == '.'):
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
-            pickle.dump([overall_loss, overall_ope, overall_ope_sim], filename)
+            pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_is_regret, overall_ope_sim_regret], filename)
+
 

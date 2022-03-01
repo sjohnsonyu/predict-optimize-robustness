@@ -33,7 +33,6 @@ class baseEnv:
 
     def getRewards(self, states, actions):
         rewards = self.R_data[np.arange(self.N), states]
-        # print('reward', np.sum(rewards))
         return rewards
 
     def getStartState(self):

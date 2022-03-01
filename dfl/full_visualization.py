@@ -18,6 +18,8 @@ parser.add_argument('--plot', default=0, type=int, help='Whether or not to creat
 parser.add_argument('--compute', default=0, type=int, help='Whether or not to run new experiments. Put 0 for False, 1 for True')
 parser.add_argument('--tr', default=1, type=int, help='Number of trials to be run starting with seed value entered for seed.')
 parser.add_argument('--name', default='.', type=str, help='Special string name.')
+parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
+
 args=parser.parse_args()
 
 
@@ -39,11 +41,11 @@ if args.compute:
 
     print ('Starting seed: ', sd)
     print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
-    subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"}', shell=True)
+    subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale}', shell=True)
     print ('Starting DF Simu based to be saved as: '+DF_SIM_filename)
-    subprocess.run(f'python3 train.py --method DF --sv {DF_SIM_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"}', shell=True)
+    subprocess.run(f'python3 train.py --method DF --sv {DF_SIM_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale}', shell=True)
     print ('Starting TS to be saved as: '+TS_filename)
-    subprocess.run(f'python3 train.py --method TS --sv {TS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd}', shell=True)
+    subprocess.run(f'python3 train.py --method TS --sv {TS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale}', shell=True)
     print ('ALL THREE DONE')
 
 
@@ -86,6 +88,8 @@ if args.plot:
     df_is_errors=[]
     df_sim_means=[]
     df_sim_errors=[]
+    df_sim_regrets=[]
+    df_is_regrets=[]
     ts_means=[]
     ts_errors=[]
     
@@ -127,7 +131,7 @@ if args.plot:
     plt.title(mode+' Loss comparison', fontsize=18)
     if args.save:
         plt.savefig('./figs/'+special+'_'+mode+'_loss.png')
-    plt.show()
+    # plt.show()
 
     ### IS OPE figure
     plt.figure()
@@ -177,7 +181,8 @@ if args.plot:
     plt.title(mode+' IS-OPE comparison', fontsize=18)
     if args.save:
         plt.savefig('./figs/'+special+'_'+mode+'_OPE_IS.png')
-    plt.show()
+    # plt.show()
+  
 
     ### SIM-OPE figure
     plt.figure()
@@ -227,7 +232,7 @@ if args.plot:
     plt.title(mode+' Sim-OPE comparison', fontsize=18)
     if args.save:
         plt.savefig('./figs/'+special+'_'+mode+'_OPE_SIM.png')
-    plt.show()
+    # plt.show()
 
 
   ### Table information
@@ -256,7 +261,7 @@ if args.plot:
   df_is_test_mean, df_is_test_ste   = np.mean(df_is_selected_metrics, axis=0), np.std(df_is_selected_metrics, axis=0) / np.sqrt(len(df_is_outputs))
   df_sim_test_mean, df_sim_test_ste = np.mean(df_sim_selected_metrics, axis=0), np.std(df_sim_selected_metrics, axis=0) / np.sqrt(len(df_sim_outputs))
 
-  print('Random test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$'.format(random_mean[0], random_ste[0], random_mean[1], random_ste[1], random_mean[2], random_ste[2])) # only valid after 0119
-  print('Two-stage test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$'.format(ts_test_mean[0], ts_test_ste[0], ts_test_mean[1], ts_test_ste[1], ts_test_mean[2], ts_test_ste[2]))
-  print('DF-IS test metrics mean (Loss/IS OPE/ Sim OPE): ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$'.format(df_is_test_mean[0], df_is_test_ste[0], df_is_test_mean[1], df_is_test_ste[1], df_is_test_mean[2], df_is_test_ste[2]))
-  print('DF-sim test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$, ${:.1f}\pm{:.1f}$'.format(df_sim_test_mean[0], df_sim_test_ste[0], df_sim_test_mean[1], df_sim_test_ste[1], df_sim_test_mean[2], df_sim_test_ste[2]))
+  print('Random test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$'.format(random_mean[0], random_ste[0], random_mean[1], random_ste[1], random_mean[2], random_ste[2])) # only valid after 0119
+  print('Two-stage test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$'.format(ts_test_mean[0], ts_test_ste[0], ts_test_mean[1], ts_test_ste[1], ts_test_mean[2], ts_test_ste[2]))
+  print('DF-IS test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$'.format(df_is_test_mean[0], df_is_test_ste[0], df_is_test_mean[1], df_is_test_ste[1], df_is_test_mean[2], df_is_test_ste[2]))
+  print('DF-sim test metrics mean (Loss/IS OPE/Sim OPE): ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$, ${:.1f}\t{:.1f}$'.format(df_sim_test_mean[0], df_sim_test_ste[0], df_sim_test_mean[1], df_sim_test_ste[1], df_sim_test_mean[2], df_sim_test_ste[2]))

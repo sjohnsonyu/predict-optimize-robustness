@@ -7,12 +7,12 @@ sys.path.insert(0, '../')
 
 from dfl.model import SyntheticANN
 from dfl.trajectory import getSimulatedTrajectories
-from dfl.utils import generateRandomTMatrix
+from dfl.utils import generateRandomTMatrix, addRandomNoise
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.environments import POMDP2MDP
 from dfl.ope import opeSimulator
 
-def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env='general', H=10, run_whittle=False, seed=0):
+def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env='general', H=10, run_whittle=False, seed=0, dist_shift=False, noise_scale=1):
     # n_benefs: number of beneficiaries in a cohort
     # n_states: number of states
     # n_instances: number of cohorts in the whole dataset
@@ -41,18 +41,19 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
     for i in range(n_instances):
         # Generate rewards from uniform distribution
         R = np.arange(n_states) # sorted(np.random.uniform(size=n_states))
-        R = (R - np.min(R)) / np.ptp(R) # normalize rewards
+        R = (R - np.min(R)) / np.ptp(R) # normalize rewards # NOTE: does this actually normalize? doesn't it need to sum over rewards to normalize?
         raw_R_data = np.repeat(R.reshape(1,-1), n_benefs, axis=0) # using the same rewards across all arms (for simplicity)
+        # TODO remove
+        raw_R_data = raw_R_data * 5 - 2
 
         # Generate transition probabilities
-        raw_T_data = generateRandomTMatrix(n_benefs, n_states=n_states, R_data=R) # numpy array
-        
+        raw_T_data = generateRandomTMatrix(n_benefs, n_states=n_states, R_data=R, dist_shift=dist_shift) # numpy array
         # Generate features using the transition probabilities
         # noise_level = 0.1
         feature = model(tf.constant(raw_T_data.reshape(-1,2*n_states*n_states), dtype=tf.float32))
-        # print(tf.norm(feature, axis=1))
         # feature = feature + tf.random.normal(shape=(n_benefs, 16,)) * noise_level
-
+        if dist_shift:  # TODO: rerun this!
+            raw_T_data = addRandomNoise(raw_T_data, noise_scale)  # 
         # Generate environment parameters
         if env=='general':
             T_data, R_data = raw_T_data, raw_R_data
@@ -63,7 +64,7 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
             # print('new R', R_data)
 
         # Different choices of Whittle indices
-        if run_whittle:
+        if run_whittle:  # NOTE: we're disabling to speed things up, but what's the role this is supposed to play?
             # w = whittleIndex(tf.constant(T_data, dtype=tf.float32)).numpy() # Old Whittle index computation. This only works for n_states=2.
             w = newWhittleIndex(tf.constant(T_data, dtype=tf.float32), \
                 tf.constant(R_data, dtype=tf.float32)).numpy() # New Whittle index computation. It should work for multiple states.
@@ -73,6 +74,7 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         assert w.shape == (n_benefs, T_data.shape[1])
 
         # start_time = time.time()
+        # NOTE: what is a trajectory?
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                                 n_benefs=n_benefs, T=L, K=K, n_trials=n_trials, gamma=gamma,
                                                                 T_data=T_data, R_data=R_data,
