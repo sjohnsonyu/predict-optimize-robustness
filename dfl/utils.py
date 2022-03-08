@@ -50,12 +50,12 @@ def getRandomProbabilityDistribution(m):
 def addRandomNoise(T_data, scale=0.8):
     n_benefs, n_states, n_actions, n_states = T_data.shape
     noise = np.random.randn(n_benefs, n_states, n_actions) * scale
-    noisy_T_data = T_data
+    noisy_T_data = T_data.numpy()
     noisy_T_data[:, :, :, 0] = noisy_T_data[:, :, :, 0] + noise
     noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
     noisy_T_data = np.where(noisy_T_data < 0, 0, noisy_T_data)
     noisy_T_data = np.where(noisy_T_data > 1, 1, noisy_T_data)
-    return noisy_T_data
+    return tf.constant(noisy_T_data, dtype=tf.float32)
 
 def generateRandomTMatrix(n_benefs, n_states, R_data, dist_shift=False):
 

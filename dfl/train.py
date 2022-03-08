@@ -13,6 +13,7 @@ from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss
 from dfl.ope import opeIS, opeIS_parallel
+from dfl.utils import addRandomNoise
 from dfl.environments import POMDP2MDP
 
 from armman.offline_trajectory import get_offline_dataset
@@ -128,6 +129,8 @@ if __name__ == '__main__':
                         T_data, R_data = POMDP2MDP(prediction, raw_R_data, H)
                         n_full_states = n_states * H
                     
+                    if mode == 'test':
+                        T_data = addRandomNoise(T_data, noise_scale)
                     # start_time = time.time()
                     loss = twoStageNLLLoss(traj, T_data, beh_policy_name) # - twoStageNLLLoss(traj, label, beh_policy_name) # Two-stage custom NLL loss
                     # print('two stage loss time:', time.time() - start_time)
@@ -162,8 +165,7 @@ if __name__ == '__main__':
                     performance = -ope * (1 - ts_weight) + loss * ts_weight
 
                     if mode == 'test':
-                        print('entering')
-                        optimal_w = newWhittleIndex(ground_truth_T_data, R_data)
+                        optimal_w = newWhittleIndex(ground_truth_T_data, R_data)  # TODO: add noise here
                         optimal_ope_IS, optimal_ess = opeIS_parallel(state_record, action_record, reward_record, optimal_w, n_benefs, L, K, n_trials, gamma,
                             target_policy_name, beh_policy_name, single_trajectory=single_trajectory)
                         optimal_ope_sim = ope_simulator(optimal_w, K)

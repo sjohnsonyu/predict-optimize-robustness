@@ -52,8 +52,8 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         # noise_level = 0.1
         feature = model(tf.constant(raw_T_data.reshape(-1,2*n_states*n_states), dtype=tf.float32))
         # feature = feature + tf.random.normal(shape=(n_benefs, 16,)) * noise_level
-        if dist_shift:  # TODO: rerun this!
-            raw_T_data = addRandomNoise(raw_T_data, noise_scale)  # 
+        # if dist_shift:
+        #     raw_T_data = addRandomNoise(raw_T_data, noise_scale)  # 
         # Generate environment parameters
         if env=='general':
             T_data, R_data = raw_T_data, raw_R_data

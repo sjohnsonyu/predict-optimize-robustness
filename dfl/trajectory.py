@@ -48,7 +48,6 @@ def simulateTrajectories(args, env, k, w, gamma, start_state=None, policies=[0])
             ## Iterate over timesteps. Note that if simulation length is L, 
             ## there are L-1 action decisions to take.
             for timestep in range(L-1):
-
                 ## Note Current State
                 state_record[tr, pol_idx, timestep, :] = np.copy(states)
                 traj[tr, pol_idx, timestep, dim_dict['state'], :] = np.copy(states)
