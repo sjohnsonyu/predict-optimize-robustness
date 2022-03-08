@@ -254,6 +254,7 @@ class DiffTopK(object):
 
         return tf.stop_gradient(Gamma), gradient_function
 
+<<<<<<< HEAD
 def getSoftTopk(a, k):
     if len(a.shape) == 2:
         bs, n = a.shape
@@ -262,6 +263,13 @@ def getSoftTopk(a, k):
     diffTopK = DiffTopK(k=k)
     gamma = diffTopK(-a)
     probs = gamma[:,:,0].numpy() * n / k
+=======
+def getSoftTopk(a, k, epsilon=0.1):
+    bs, n = a.shape
+    diffTopK = DiffTopK(k=k, epsilon=epsilon)
+    gamma = diffTopK(-a).numpy()
+    probs = gamma[:,:,0] / np.sum(gamma[:,:,0], axis=1, keepdims=True)
+>>>>>>> dfl
 
     selection = []
     for i in range(bs):
