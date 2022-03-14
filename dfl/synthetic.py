@@ -45,7 +45,8 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         R = (R - np.min(R)) / np.ptp(R) # * 2 - 1 # normalize rewards to between [-1,1]
         raw_R_data = np.repeat(R.reshape(1,-1), n_benefs, axis=0) # using the same rewards across all arms (for simplicity)
         # TODO remove
-        raw_R_data = raw_R_data * 5 - 2
+        # raw_R_data = raw_R_data * 2 - 1
+        raw_R_data = raw_R_data * 8 - 3
 
         # Generate transition probabilities
         raw_T_data = generateRandomTMatrix(n_benefs, n_states=n_states, R_data=R, dist_shift=dist_shift) # numpy array
