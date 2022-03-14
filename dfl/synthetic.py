@@ -41,8 +41,8 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
     for i in range(n_instances):
         # Generate rewards from uniform distribution
         R = np.arange(n_states) # sorted(np.random.uniform(size=n_states))
-        R = (R - np.min(R)) / np.ptp(R) # normalize rewards # NOTE: does this actually normalize? doesn't it need to sum over rewards to normalize?
-        # R = (R - np.min(R)) / np.ptp(R) * 2 - 1 # normalize rewards to between [-1,1]
+        # R = (R - np.min(R)) / np.ptp(R) # normalize rewards # NOTE: does this actually normalize? doesn't it need to sum over rewards to normalize?
+        R = (R - np.min(R)) / np.ptp(R) # * 2 - 1 # normalize rewards to between [-1,1]
         raw_R_data = np.repeat(R.reshape(1,-1), n_benefs, axis=0) # using the same rewards across all arms (for simplicity)
         # TODO remove
         raw_R_data = raw_R_data * 5 - 2

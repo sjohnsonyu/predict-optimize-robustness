@@ -13,7 +13,7 @@ from dfl.model import ANN
 from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss
-from dfl.ope import opeIS, opeIS_parallel
+from dfl.ope import opeIS_parallel
 from dfl.utils import addRandomNoise
 from dfl.environments import POMDP2MDP
 
@@ -103,8 +103,8 @@ if __name__ == '__main__':
     overall_loss = {'train': [], 'test': [], 'val': []} # two-stage loss
     overall_ope = {'train': [], 'test': [], 'val': []} # OPE IS
     overall_ope_sim = {'train': [], 'test': [], 'val': []} # OPE simulation
-    overall_ope_sim_regret = {'train': [], 'test': [], 'val': []}
-    overall_ope_is_regret = {'train': [], 'test': [], 'val': []}
+    overall_ope_IS_optimal = {'train': [], 'test': [], 'val': []}
+    overall_ope_sim_optimal = {'train': [], 'test': [], 'val': []}
     for epoch in range(total_epoch+1):
         model_list.append(model.get_weights())
         for mode, dataset in dataset_list:
@@ -112,8 +112,8 @@ if __name__ == '__main__':
             ess_list = []
             ope_IS_list = [] # OPE IS
             ope_sim_list = [] # OPE simulation
-            optimal_ope_is_regret_list = [] # OPE IS
-            optimal_ope_sim_regret_list = [] # OPE simulation
+            # optimal_ope_is_regret_list = [] # OPE IS
+            # optimal_ope_sim_regret_list = [] # OPE simulation
             ope_IS_optimal_list = [] # OPE IS
             ope_sim_optimal_list = [] # OPE simulation
             if mode == 'train':
@@ -122,7 +122,7 @@ if __name__ == '__main__':
             for (feature, label, raw_R_data, traj, ope_simulator, _, state_record, action_record, reward_record) in dataset:
                 feature = tf.constant(feature, dtype=tf.float32)
                 raw_R_data = tf.constant(raw_R_data, dtype=tf.float32)
-                ground_truth_T_data = tf.constant(ground_truth_T_data, dtype=tf.float32)
+                # ground_truth_T_data = tf.constant(ground_truth_T_data, dtype=tf.float32)
 
                 # ================== computing optimal solution ===================
                 if args.data == 'synthetic':
@@ -201,13 +201,13 @@ if __name__ == '__main__':
                     ts_weight = TS_WEIGHT
                     performance = -ope * (1 - ts_weight) + loss * ts_weight
 
-                    if mode == 'test':
-                        optimal_w = newWhittleIndex(ground_truth_T_data, R_data)  # TODO: add noise here
-                        optimal_ope_IS, optimal_ess = opeIS_parallel(state_record, action_record, reward_record, optimal_w, n_benefs, L, K, n_trials, gamma,
-                            target_policy_name, beh_policy_name, single_trajectory=single_trajectory)
-                        optimal_ope_sim = ope_simulator(optimal_w, K)
-                        optimal_ope_sim_regret_list.append(optimal_ope_sim - ope_sim)
-                        optimal_ope_is_regret_list.append(optimal_ope_IS - ope_IS)
+                    # if mode == 'test':
+                    #     optimal_w = newWhittleIndex(ground_truth_T_data, R_data)  # TODO: add noise here
+                    #     optimal_ope_IS, optimal_ess = opeIS_parallel(state_record, action_record, reward_record, optimal_w, n_benefs, L, K, n_trials, gamma,
+                    #         target_policy_name, beh_policy_name, single_trajectory=single_trajectory)
+                    #     optimal_ope_sim = ope_simulator(optimal_w, K)
+                    #     optimal_ope_sim_regret_list.append(optimal_ope_sim - ope_sim)
+                    #     optimal_ope_is_regret_list.append(optimal_ope_IS - ope_IS)
 
 
 
@@ -232,15 +232,17 @@ if __name__ == '__main__':
             print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list):.2f}, ' +
                     f'average ope (IS) {np.mean(ope_IS_list):.2f}, average ope (sim) {np.mean(ope_sim_list):.2f}, ' +
                     f'optimal ope (IS) {np.mean(ope_IS_optimal_list):.2f}, optimal ope (sim) {np.mean(ope_sim_optimal_list):.2f}')
-            if mode == 'test':
-                print(f'average ope (IS) regret {np.mean(optimal_ope_is_regret_list)}, average ope (sim) regret {np.mean(optimal_ope_sim_regret_list)}')
+            # if mode == 'test':
+            #     print(f'average ope (IS) regret {np.mean(optimal_ope_is_regret_list)}, average ope (sim) regret {np.mean(optimal_ope_sim_regret_list)}')
             
             overall_loss[mode].append(np.mean(loss_list))
             overall_ope[mode].append(np.mean(ope_IS_list))
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
-            if mode == 'test':
-                overall_ope_sim_regret[mode].append(np.mean(optimal_ope_sim_regret_list))
-                overall_ope_is_regret[mode].append(np.mean(optimal_ope_is_regret_list))
+            overall_ope_IS_optimal[mode].append(np.mean(ope_IS_optimal_list))
+            overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))
+            # if mode == 'test':
+            #     overall_ope_sim_regret[mode].append(np.mean(optimal_ope_sim_regret_list))
+            #     overall_ope_is_regret[mode].append(np.mean(optimal_ope_is_regret_list))
 
     folder_path = 'pretrained/{}'.format(args.data)
 
@@ -254,6 +256,7 @@ if __name__ == '__main__':
     if not(args.sv == '.'):
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
-            pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_is_regret, overall_ope_sim_regret], filename)
+            # pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_is_regret, overall_ope_sim_regret], filename)
+            pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_IS_optimal, overall_ope_sim_optimal], filename)
 
 
