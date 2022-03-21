@@ -47,6 +47,20 @@ def getRandomProbabilityDistribution(m):
     assert np.sum(diffs) == 1 and len(diffs) == m
     return diffs
 
+# def addRandomNoise(T_data, scale=0.8):
+#     n_benefs, n_states, n_actions, n_states = T_data.shape
+#     noise = tf.constant(np.random.randn(n_benefs, n_states, n_actions) * scale, dtype=tf.float32)
+#     noisy_T_data = T_data
+#     # import pdb; pdb.set_trace()
+#     noisy_T_data[:, :, :, 0].assign(noisy_T_data[:, :, :, 0] + noise)
+#     noisy_T_data[:, :, :, 1].assign(noisy_T_data[:, :, :, 1] + noise)
+#     # noisy_T_data[:, :, :, 0] = noisy_T_data[:, :, :, 0] + noise
+#     # noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
+#     noisy_T_data = tf.where(noisy_T_data < 0, 0, noisy_T_data)
+#     noisy_T_data = tf.where(noisy_T_data > 1, 1, noisy_T_data)
+#     # return tf.constant(noisy_T_data, dtype=tf.float32)
+#     return noisy_T_data
+
 def addRandomNoise(T_data, scale=0.8):
     n_benefs, n_states, n_actions, n_states = T_data.shape
     noise = np.random.randn(n_benefs, n_states, n_actions) * scale
@@ -55,6 +69,15 @@ def addRandomNoise(T_data, scale=0.8):
     noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
     noisy_T_data = np.where(noisy_T_data < 0, 0, noisy_T_data)
     noisy_T_data = np.where(noisy_T_data > 1, 1, noisy_T_data)
+    return tf.constant(noisy_T_data, dtype=tf.float32)
+
+def flipClusterProbabilities(T_data, flip_percentage=0.1):
+    n_benefs, _, _, _ = T_data.shape
+    flip_indices = np.random.choice(np.arange(n_benefs), size=int(n_benefs*flip_percentage), replace=False)
+    noisy_T_data = T_data.numpy()
+    temp = noisy_T_data[flip_indices, :, :, 0]
+    noisy_T_data[flip_indices, :, :, 0] = noisy_T_data[flip_indices, :, :, 1]
+    noisy_T_data[flip_indices, :, :, 1] = temp
     return tf.constant(noisy_T_data, dtype=tf.float32)
 
 def generateRandomTMatrix(n_benefs, n_states, R_data, dist_shift=False):

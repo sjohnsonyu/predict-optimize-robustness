@@ -7,6 +7,7 @@ import sys
 import os
 import pickle
 import random
+from tf.keras.losses import MeanSquaredError
 sys.path.insert(0, "../")
 
 from dfl.model import ANN
@@ -14,7 +15,7 @@ from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss
 from dfl.ope import opeIS_parallel
-from dfl.utils import addRandomNoise
+from dfl.utils import addRandomNoise, flipClusterProbabilities
 from dfl.environments import POMDP2MDP
 
 from armman.offline_trajectory import get_offline_dataset
@@ -30,7 +31,7 @@ if __name__ == '__main__':
     parser.add_argument('--ope', default='sim', type=str, help='importance sampling (IS) or simulation-based (sim).')
     parser.add_argument('--seed', default=0, type=int, help='random seed for synthetic data generation.')
     parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
-  
+    parser.add_argument('--robust', default=None, type=str, help='method of robust training')
 
     args = parser.parse_args()
     print('argparser arguments', args)
@@ -75,16 +76,16 @@ if __name__ == '__main__':
         # dataset generation
         n_instances = args.instances
         # Seed are set inside generateDataset function
-        train_val_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
-        test_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed, dist_shift=True, noise_scale=noise_scale)
+        full_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
+        # test_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed, dist_shift=True, noise_scale=noise_scale)
         single_trajectory = False
     else:
         raise NotImplementedError
 
 
-    train_dataset = train_val_dataset[:int(n_instances*0.8)]
-    val_dataset   = train_val_dataset[int(n_instances*0.8):]
-    # test_dataset  = test_dataset[int(n_instances*0.8):]
+    train_dataset = full_dataset[:int(n_instances*0.7)]
+    val_dataset   = full_dataset[int(n_instances*0.7):int(n_instances*0.8)]
+    test_dataset  = full_dataset[int(n_instances*0.8):]
 
     dataset_list = [('train', train_dataset), ('val', val_dataset), ('test', test_dataset)]
 
@@ -136,7 +137,8 @@ if __name__ == '__main__':
                 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
-                    optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
+                    optimal_loss = MeanSquaredError(T_data, label)
+                    # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
                     
                     optimal_epsilon = 0.01
                     ope_IS_optimal, ess_optimal = opeIS_parallel(state_record, action_record, reward_record, w_optimal, n_benefs, L, K, n_trials, gamma,
@@ -153,6 +155,7 @@ if __name__ == '__main__':
                 # ======================= Tracking gradient ========================
                 with tf.GradientTape() as tape:
                     prediction = model(feature) # Transition probabilities
+                    # prediction = tf.Variable(prediction)
                     # if epoch==total_epoch:
                     #     prediction=label
 
@@ -164,10 +167,13 @@ if __name__ == '__main__':
                         T_data, R_data = POMDP2MDP(prediction, raw_R_data, H)
                         n_full_states = n_states * H
                     
-                    if mode == 'test':
-                        T_data = addRandomNoise(T_data, noise_scale)
+                    if mode == 'test' or args.robust == 'add_noise':
+                        # TODO implement so that it doesn't upset gradient tracking
+                        label = addRandomNoise(label, noise_scale)
+                        # T_data = flipClusterProbabilities(T_data, flip_percentage=0.5)
                     # start_time = time.time()
-                    loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
+                    # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
+                    loss = MeanSquaredError(T_data, label) - optimal_loss
                     # print('two stage loss time:', time.time() - start_time)
  
                     # general idea: use ground truth test set, calculate own whittle
