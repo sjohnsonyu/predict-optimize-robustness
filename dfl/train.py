@@ -7,13 +7,12 @@ import sys
 import os
 import pickle
 import random
-from tf.keras.losses import MeanSquaredError
 sys.path.insert(0, "../")
 
 from dfl.model import ANN
 from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
-from dfl.utils import getSoftTopk, twoStageNLLLoss
+from dfl.utils import getSoftTopk, twoStageNLLLoss, euclideanLoss
 from dfl.ope import opeIS_parallel
 from dfl.utils import addRandomNoise, flipClusterProbabilities
 from dfl.environments import POMDP2MDP
@@ -77,7 +76,6 @@ if __name__ == '__main__':
         n_instances = args.instances
         # Seed are set inside generateDataset function
         full_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
-        # test_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed, dist_shift=True, noise_scale=noise_scale)
         single_trajectory = False
     else:
         raise NotImplementedError
@@ -113,8 +111,6 @@ if __name__ == '__main__':
             ess_list = []
             ope_IS_list = [] # OPE IS
             ope_sim_list = [] # OPE simulation
-            # optimal_ope_is_regret_list = [] # OPE IS
-            # optimal_ope_sim_regret_list = [] # OPE simulation
             ope_IS_optimal_list = [] # OPE IS
             ope_sim_optimal_list = [] # OPE simulation
             if mode == 'train':
@@ -123,7 +119,6 @@ if __name__ == '__main__':
             for (feature, label, raw_R_data, traj, ope_simulator, _, state_record, action_record, reward_record) in dataset:
                 feature = tf.constant(feature, dtype=tf.float32)
                 raw_R_data = tf.constant(raw_R_data, dtype=tf.float32)
-                # ground_truth_T_data = tf.constant(ground_truth_T_data, dtype=tf.float32)
 
                 # ================== computing optimal solution ===================
                 if args.data == 'synthetic':
@@ -134,10 +129,13 @@ if __name__ == '__main__':
                     elif env=='POMDP':
                         T_data, R_data = POMDP2MDP(label, raw_R_data, H)
                         n_full_states = n_states * H
+                    
+                    if mode == 'test' or args.robust == 'add_noise':
+                        label = addRandomNoise(label, noise_scale)
                 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
-                    optimal_loss = MeanSquaredError(T_data, label)
+                    optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
                     
                     optimal_epsilon = 0.01
@@ -155,9 +153,6 @@ if __name__ == '__main__':
                 # ======================= Tracking gradient ========================
                 with tf.GradientTape() as tape:
                     prediction = model(feature) # Transition probabilities
-                    # prediction = tf.Variable(prediction)
-                    # if epoch==total_epoch:
-                    #     prediction=label
 
                     # Setup MDP or POMDP environment
                     if env=='general':
@@ -167,18 +162,14 @@ if __name__ == '__main__':
                         T_data, R_data = POMDP2MDP(prediction, raw_R_data, H)
                         n_full_states = n_states * H
                     
-                    if mode == 'test' or args.robust == 'add_noise':
-                        # TODO implement so that it doesn't upset gradient tracking
-                        label = addRandomNoise(label, noise_scale)
-                        # T_data = flipClusterProbabilities(T_data, flip_percentage=0.5)
+                    # if mode == 'test' or args.robust == 'add_noise':
+                    #     label = addRandomNoise(label, noise_scale)
+                    
                     # start_time = time.time()
                     # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
-                    loss = MeanSquaredError(T_data, label) - optimal_loss
+                    loss = euclideanLoss(T_data, label) - optimal_loss
                     # print('two stage loss time:', time.time() - start_time)
  
-                    # general idea: use ground truth test set, calculate own whittle
-                    # calculate rewards and then subtract actual in order to obtain regret
-
                     # Batch Whittle index computation
                     # start_time = time.time()
                     w = newWhittleIndex(T_data, R_data)
@@ -207,16 +198,6 @@ if __name__ == '__main__':
                     ts_weight = TS_WEIGHT
                     performance = -ope * (1 - ts_weight) + loss * ts_weight
 
-                    # if mode == 'test':
-                    #     optimal_w = newWhittleIndex(ground_truth_T_data, R_data)  # TODO: add noise here
-                    #     optimal_ope_IS, optimal_ess = opeIS_parallel(state_record, action_record, reward_record, optimal_w, n_benefs, L, K, n_trials, gamma,
-                    #         target_policy_name, beh_policy_name, single_trajectory=single_trajectory)
-                    #     optimal_ope_sim = ope_simulator(optimal_w, K)
-                    #     optimal_ope_sim_regret_list.append(optimal_ope_sim - ope_sim)
-                    #     optimal_ope_is_regret_list.append(optimal_ope_IS - ope_IS)
-
-
-
                 # backpropagation
                 if mode == 'train' and epoch<total_epoch and epoch>0:
                     if training_mode == 'two-stage':
@@ -234,21 +215,15 @@ if __name__ == '__main__':
                 ope_sim_optimal_list.append(ope_sim_optimal)
                 ess_list.append(tf.reduce_mean(ess))
 
-            # import pdb; pdb.set_trace()
             print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list):.2f}, ' +
                     f'average ope (IS) {np.mean(ope_IS_list):.2f}, average ope (sim) {np.mean(ope_sim_list):.2f}, ' +
                     f'optimal ope (IS) {np.mean(ope_IS_optimal_list):.2f}, optimal ope (sim) {np.mean(ope_sim_optimal_list):.2f}')
-            # if mode == 'test':
-            #     print(f'average ope (IS) regret {np.mean(optimal_ope_is_regret_list)}, average ope (sim) regret {np.mean(optimal_ope_sim_regret_list)}')
             
             overall_loss[mode].append(np.mean(loss_list))
             overall_ope[mode].append(np.mean(ope_IS_list))
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
             overall_ope_IS_optimal[mode].append(np.mean(ope_IS_optimal_list))
             overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))
-            # if mode == 'test':
-            #     overall_ope_sim_regret[mode].append(np.mean(optimal_ope_sim_regret_list))
-            #     overall_ope_is_regret[mode].append(np.mean(optimal_ope_is_regret_list))
 
     folder_path = 'pretrained/{}'.format(args.data)
 
@@ -262,7 +237,6 @@ if __name__ == '__main__':
     if not(args.sv == '.'):
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
-            # pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_is_regret, overall_ope_sim_regret], filename)
             pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_IS_optimal, overall_ope_sim_optimal], filename)
 
 

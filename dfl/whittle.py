@@ -51,8 +51,9 @@ def newWhittleIndex(P, R, gamma=0.99):
     tmp_P = tmp_P.numpy().reshape(1, N, n_states, n_actions, n_states).repeat(n_wh_states, axis=0)
 
     # initialize upper and lower bounds for binary search
-    whittle_max = 2
-    whittle_min = -2
+    # TODO: update me if rewards are changed!!
+    whittle_max = 8
+    whittle_min = -8
 
     w_ub = np.ones((n_wh_states, N)) * whittle_max # Whittle index upper bound
     w_lb = np.ones((n_wh_states, N)) * whittle_min # Whittle index lower bound

@@ -153,6 +153,10 @@ def twoStageNLLLoss(traj, prediction, policy):
     trans_probs = tf.gather_nd(prediction, indices)
     return -tf.reduce_sum(tf.math.log(trans_probs)) / n_tr
 
+
+def euclideanLoss(x, y):
+    return tf.sqrt(tf.reduce_sum(tf.square(x - y), 1))
+
 """
 DIFFERENTIALBLE TOP-K LAYER
 """
