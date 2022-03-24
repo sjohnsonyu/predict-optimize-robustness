@@ -133,22 +133,13 @@ if __name__ == '__main__':
                     
                     if mode == 'test' or args.robust == 'add_noise':
                         label = addRandomNoise(label, noise_scale)
-                        
-                    w_optimal = newWhittleIndex(label, R_data)
+                        OPE_sim_n_trials = 100
+                        ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_sim_n_trials, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
 
+                    w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
-
-                    if mode == 'test' or args.robust == 'add_noise':
-                        traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
-                                                                n_benefs=n_benefs, T=L, K=K, n_trials=n_trials, gamma=gamma,
-                                                                T_data=label.numpy(), R_data=R_data.numpy(),
-                                                                w=w_optimal.numpy(), replace=False, policies=[0,1,2]
-                                                                )
-                        OPE_sim_n_trials = 100
-                        ope_simulator = opeSimulator(traj, n_benefs, L, n_states, OPE_sim_n_trials, gamma, beh_policy_name='random', T_data=T_data.numpy(), R_data=R_data.numpy(), env=env, H=H)
-
 
                     optimal_epsilon = 0.01
                     ope_IS_optimal, ess_optimal = opeIS_parallel(state_record, action_record, reward_record, w_optimal, n_benefs, L, K, n_trials, gamma,
@@ -173,9 +164,6 @@ if __name__ == '__main__':
                     elif env=='POMDP':
                         T_data, R_data = POMDP2MDP(prediction, raw_R_data, H)
                         n_full_states = n_states * H
-                    
-                    # if mode == 'test' or args.robust == 'add_noise':
-                    #     label = addRandomNoise(label, noise_scale)
                     
                     # start_time = time.time()
                     # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
