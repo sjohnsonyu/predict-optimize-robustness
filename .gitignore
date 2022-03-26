@@ -9,3 +9,6 @@ mmitra-rmab/may_data
 mmitra-rmab/outputs
 outputs/
 dfl/pretrained/
+*.pickle
+dfl/results/
+*.png
