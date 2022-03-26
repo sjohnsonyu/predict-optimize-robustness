@@ -20,6 +20,11 @@ from dfl.environments import POMDP2MDP
 
 from armman.offline_trajectory import get_offline_dataset
 
+# TODO put into a constants file
+OPE_SIM_N_TRIALS = 100
+OPTIMAL_EPSILON = 0.01
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ARMMAN decision-focused learning')
     parser.add_argument('--method', default='TS', type=str, help='TS (two-stage learning) or DF (decision-focused learning).')
@@ -75,17 +80,15 @@ if __name__ == '__main__':
     elif args.data == 'synthetic':
         # dataset generation
         n_instances = args.instances
-        # Seed are set inside generateDataset function
+        # Seed is set inside generateDataset function
         full_dataset  = generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=env, H=H, seed=seed)
         single_trajectory = False
     else:
         raise NotImplementedError
 
-
     train_dataset = full_dataset[:int(n_instances*0.7)]
     val_dataset   = full_dataset[int(n_instances*0.7):int(n_instances*0.8)]
     test_dataset  = full_dataset[int(n_instances*0.8):]
-
     dataset_list = [('train', train_dataset), ('val', val_dataset), ('test', test_dataset)]
 
     # model initialization
@@ -101,18 +104,14 @@ if __name__ == '__main__':
     training_mode = 'two-stage' if args.method == 'TS' else 'decision-focused'
     total_epoch = args.epochs
     overall_loss = {'train': [], 'test': [], 'val': []} # two-stage loss
-    overall_ope = {'train': [], 'test': [], 'val': []} # OPE IS
     overall_ope_sim = {'train': [], 'test': [], 'val': []} # OPE simulation
-    overall_ope_IS_optimal = {'train': [], 'test': [], 'val': []}
     overall_ope_sim_optimal = {'train': [], 'test': [], 'val': []}
     for epoch in range(total_epoch+1):
         model_list.append(model.get_weights())
         for mode, dataset in dataset_list:
             loss_list = []
             ess_list = []
-            ope_IS_list = [] # OPE IS
             ope_sim_list = [] # OPE simulation
-            ope_IS_optimal_list = [] # OPE IS
             ope_sim_optimal_list = [] # OPE simulation
             if mode == 'train':
                 dataset = tqdm.tqdm(dataset)
@@ -123,80 +122,48 @@ if __name__ == '__main__':
 
                 # ================== computing optimal solution ===================
                 if args.data == 'synthetic':
-                    label   = tf.constant(label, dtype=tf.float32)
-                    if env=='general':
-                        T_data, R_data = label, raw_R_data
-                        n_full_states = n_states
-                    elif env=='POMDP':
-                        T_data, R_data = POMDP2MDP(label, raw_R_data, H)
-                        n_full_states = n_states * H
-                    
+                    label = tf.constant(label, dtype=tf.float32)
+                    T_data, R_data = label, raw_R_data
+                    n_full_states = n_states
+
                     if mode == 'test' or args.robust == 'add_noise':
                         label = addRandomNoise(label, noise_scale)
-                        OPE_sim_n_trials = 100
-                        ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_sim_n_trials, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
+                        
+                        ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
-
-                    optimal_epsilon = 0.01
-                    ope_IS_optimal, ess_optimal = opeIS_parallel(state_record, action_record, reward_record, w_optimal, n_benefs, L, K, n_trials, gamma,
-                            target_policy_name, beh_policy_name, single_trajectory=single_trajectory, epsilon=optimal_epsilon)
-                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=optimal_epsilon)
+                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=OPTIMAL_EPSILON)
                 
                 else: # no label available in the pilot dataset
                     w_optimal = tf.zeros((n_benefs, n_full_states)) # random
                     optimal_loss = 0
-
-                    ope_IS_optimal = 0
                     ope_sim_optimal = 0
 
                 # ======================= Tracking gradient ========================
                 with tf.GradientTape() as tape:
                     prediction = model(feature) # Transition probabilities
 
-                    # Setup MDP or POMDP environment
-                    if env=='general':
-                        T_data, R_data = prediction, raw_R_data
-                        n_full_states = n_states
-                    elif env=='POMDP':
-                        T_data, R_data = POMDP2MDP(prediction, raw_R_data, H)
-                        n_full_states = n_states * H
+                    # Setup MDP environment
+                    T_data, R_data = prediction, raw_R_data
+                    n_full_states = n_states
                     
-                    # start_time = time.time()
                     # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
                     loss = euclideanLoss(T_data, label) - optimal_loss
-                    # print('two stage loss time:', time.time() - start_time)
  
                     # Batch Whittle index computation
-                    # start_time = time.time()
                     w = newWhittleIndex(T_data, R_data)
                     w = tf.reshape(w, (n_benefs, n_full_states))
                     
                     if epoch == total_epoch:
                         w = tf.zeros((n_benefs, n_full_states))
-                    # print('Whittle index time:', time.time() - start_time)
                     
-                    # start_time = time.time()
-                    evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01
-                    ope_IS, ess = opeIS_parallel(state_record, action_record, reward_record, w, n_benefs, L, K, n_trials, gamma,
-                            target_policy_name, beh_policy_name, single_trajectory=single_trajectory, epsilon=evaluation_epsilon)
+                    evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
                     ope_sim = ope_simulator(w, K, epsilon=evaluation_epsilon)
 
-                    # ope_sim = ope_simulator(tf.reshape(w, (n_benefs, n_full_states)))
-                    if ope_mode == 'IS': # importance-sampling based OPE
-                        ess_weight = 0 # no ess weight. Purely CWPDIS
-                        ope = ope_IS # - ess_weight * tf.reduce_sum(1.0 / tf.math.sqrt(ess))
-                    elif ope_mode == 'sim': # simulation-based OPE
-                        ope = ope_sim
-                    else:
-                        raise NotImplementedError
-                    # print('Evaluation time:', time.time() - start_time)
-
-                    ts_weight = TS_WEIGHT
-                    performance = -ope * (1 - ts_weight) + loss * ts_weight
+                    performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
 
                 # backpropagation
                 if mode == 'train' and epoch<total_epoch and epoch>0:
@@ -209,20 +176,15 @@ if __name__ == '__main__':
                     optimizer.apply_gradients(zip(grad, model.trainable_variables))
 
                 loss_list.append(loss)
-                ope_IS_list.append(ope_IS)
                 ope_sim_list.append(ope_sim)
-                ope_IS_optimal_list.append(ope_IS_optimal)
                 ope_sim_optimal_list.append(ope_sim_optimal)
-                ess_list.append(tf.reduce_mean(ess))
 
-            print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list):.2f}, ' +
-                    f'average ope (IS) {np.mean(ope_IS_list):.2f}, average ope (sim) {np.mean(ope_sim_list):.2f}, ' +
-                    f'optimal ope (IS) {np.mean(ope_IS_optimal_list):.2f}, optimal ope (sim) {np.mean(ope_sim_optimal_list):.2f}')
+            print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list):.4f}, ' +
+                    f'average ope (sim) {np.mean(ope_sim_list):.2f}, ' +
+                    f'optimal ope (sim) {np.mean(ope_sim_optimal_list):.2f}')
             
             overall_loss[mode].append(np.mean(loss_list))
-            overall_ope[mode].append(np.mean(ope_IS_list))
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
-            overall_ope_IS_optimal[mode].append(np.mean(ope_IS_optimal_list))
             overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))
 
     folder_path = 'pretrained/{}'.format(args.data)
@@ -237,6 +199,7 @@ if __name__ == '__main__':
     if not(args.sv == '.'):
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
-            pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_IS_optimal, overall_ope_sim_optimal], filename)
+            pickle.dump([overall_loss, overall_ope_sim, overall_ope_sim_optimal], filename)
+            # pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_IS_optimal, overall_ope_sim_optimal], filename)
 
 
