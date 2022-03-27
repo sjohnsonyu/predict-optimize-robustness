@@ -76,7 +76,6 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         assert w.shape == (n_benefs, T_data.shape[1])
 
         # start_time = time.time()
-        # NOTE: what is a trajectory?
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                                 n_benefs=n_benefs, T=L, K=K, n_trials=n_trials, gamma=gamma,
                                                                 T_data=T_data, R_data=R_data,

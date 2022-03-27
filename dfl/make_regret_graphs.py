@@ -30,6 +30,10 @@ if __name__ == '__main__':
     # TODO: remove this
     prefixes = ['TS', 'DF_SIM']
 
+    # df_is_ope_graph = [reward_data[prefix]['DF_IS'][-3] for prefix in prefixes]
+    # df_sim_ope_graph = [reward_data[prefix]['DF_SIM'][-3] for prefix in prefixes]
+    # df_is_ope_optimal_graph = [reward_data[prefix]['DF_IS_optimal'][-3] for prefix in prefixes]
+    # df_sim_ope_optimal_graph = [reward_data[prefix]['DF_SIM_optimal'][-3] for prefix in prefixes]
     df_is_ope_graph = [np.max(reward_data[prefix]['DF_IS']) for prefix in prefixes]
     df_sim_ope_graph = [np.max(reward_data[prefix]['DF_SIM']) for prefix in prefixes]
     df_is_ope_optimal_graph = [np.max(reward_data[prefix]['DF_IS_optimal']) for prefix in prefixes]

@@ -178,7 +178,7 @@ class opeSimulator(object):
             self.emp_R_data = R_data # Reward list is explicitly given in the MDP version
         else:
             self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
-    
+
     def __call__(self, w, K, epsilon=0.1):
         self.K = K
         self.epsilon = epsilon

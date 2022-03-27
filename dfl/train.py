@@ -22,8 +22,9 @@ from armman.offline_trajectory import get_offline_dataset
 
 # TODO put into a constants file
 OPE_SIM_N_TRIALS = 100
-OPTIMAL_EPSILON = 0.01
-
+# OPTIMAL_EPSILON = 0.01
+OPTIMAL_EPSILON = 0.05
+print('using epsilon =', OPTIMAL_EPSILON)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ARMMAN decision-focused learning')
@@ -136,7 +137,7 @@ if __name__ == '__main__':
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
                     ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=OPTIMAL_EPSILON)
-                
+
                 else: # no label available in the pilot dataset
                     w_optimal = tf.zeros((n_benefs, n_full_states)) # random
                     optimal_loss = 0
@@ -152,15 +153,16 @@ if __name__ == '__main__':
                     
                     # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
                     loss = euclideanLoss(T_data, label) - optimal_loss
- 
+
                     # Batch Whittle index computation
                     w = newWhittleIndex(T_data, R_data)
                     w = tf.reshape(w, (n_benefs, n_full_states))
-                    
+
                     if epoch == total_epoch:
                         w = tf.zeros((n_benefs, n_full_states))
-                    
-                    evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
+
+                    # evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
+                    evaluation_epsilon = OPTIMAL_EPSILON
                     ope_sim = ope_simulator(w, K, epsilon=evaluation_epsilon)
 
                     performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
@@ -182,7 +184,7 @@ if __name__ == '__main__':
             print(f'Epoch {epoch}, {mode} mode, average loss {np.mean(loss_list):.4f}, ' +
                     f'average ope (sim) {np.mean(ope_sim_list):.2f}, ' +
                     f'optimal ope (sim) {np.mean(ope_sim_optimal_list):.2f}')
-            
+
             overall_loss[mode].append(np.mean(loss_list))
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
             overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))

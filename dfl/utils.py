@@ -158,7 +158,7 @@ def euclideanLoss(x, y):
     return tf.sqrt(tf.reduce_sum(tf.square(x - y), 1))
 
 """
-DIFFERENTIALBLE TOP-K LAYER
+DIFFERENTIABLE TOP-K LAYER
 """
 class DiffTopK(object):
     """
