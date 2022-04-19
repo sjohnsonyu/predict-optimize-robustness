@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import os
 import numpy as np
 import itertools
 import pickle
@@ -36,17 +37,20 @@ if args.compute:
   for sd in range(args.seed, args.seed+args.tr):
  
     # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
-    df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
-    ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
+    curr_dir = os.path.abspath(os.getcwd())
+    df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
+    ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
+    # df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
+    # ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
 
     robust_clause = '' if not args.robust == 'add_noise' else '--robust add_noise'
     print ('Starting seed: ', sd)
     # print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
     # subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
     print ('Starting DF Simu based to be saved as:', df_sim_filename)
-    subprocess.run(f'python3 train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
+    subprocess.run(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
     print ('Starting TS to be saved as:', ts_filename)
-    subprocess.run(f'python3 train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
+    subprocess.run(f'python3 {curr_dir}/train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
     print ('BOTH DONE')
 
 
