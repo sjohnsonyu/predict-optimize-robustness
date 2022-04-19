@@ -18,6 +18,8 @@ parser.add_argument('--tr', default=1, type=int, help='Number of trials to be ru
 parser.add_argument('--name', default='.', type=str, help='Special string name.')
 parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
 parser.add_argument('--robust', default=None, type=str, help='method of robust training')
+parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
+
 
 args=parser.parse_args()
 
@@ -42,9 +44,9 @@ if args.compute:
     # print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
     # subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
     print ('Starting DF Simu based to be saved as:', df_sim_filename)
-    subprocess.run(f'python3 train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
+    subprocess.run(f'python3 train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
     print ('Starting TS to be saved as:', ts_filename)
-    subprocess.run(f'python3 train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
+    subprocess.run(f'python3 train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
     print ('BOTH DONE')
 
 
@@ -174,20 +176,28 @@ if args.plot:
   ts_selected_metrics = []
   df_sim_selected_metrics = []
   optimal_selected_metrics = []
+  random_regrets = []
+  ts_regrets = []
+  df_regrets = []
+  optimal_opes = []
   for sd in range(args.seed, args.seed+args.tr):
+    # Optimal selected epoch
+    optimal_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][2]['val'][:-1]) # Maximize SIM OPE
+    optimal_selected_metrics.append([0, df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]])
+    optimal_performance = df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]
+    optimal_opes.append(optimal_performance)
+
     # Two-stage selected epoch
     print ('seed:', sd, 'out of', len(ts_outputs))
     # ts_selected_epoch = np.argmin(ts_outputs[sd-args.seed][0]['val'][:-1]) # loss metric
     ts_selected_epoch = np.argmax(ts_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
     ts_selected_metrics.append([ts_outputs[sd-args.seed][i]['test'][ts_selected_epoch] for i in range(2)])
+    ts_regrets.append(optimal_performance - ts_outputs[sd-args.seed][1]['test'][ts_selected_epoch])
 
     # DF-sim selected epoch
     df_sim_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
     df_sim_selected_metrics.append([df_sim_outputs[sd-args.seed][i]['test'][df_sim_selected_epoch] for i in range(2)])
-    
-    # Optimal selected epoch
-    optimal_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][2]['val'][:-1]) # Maximize SIM OPE
-    optimal_selected_metrics.append([0, df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]])
+    df_regrets.append(optimal_performance - df_sim_outputs[sd-args.seed][1]['test'][df_sim_selected_epoch])
 
 
   ts_selected_metrics = np.array(ts_selected_metrics)
@@ -203,6 +213,8 @@ if args.plot:
   print(f'DF-sim test metrics mean (Loss | Sim OPE):       {df_sim_test_mean[0]:.3f}\t{df_sim_test_mean[1]:.1f}')
   print(f'Optimal DF test metrics mean (Loss | Sim OPE):   N/A\t{optimal_test_mean[1]:.1f}')
 
+
+
   labels = ['random', 'ts', 'df-sim', 'optimal']
   colors = ['#DB4437', '#F4B400', '#1f77b4', '#53AD58']
   plt.figure()
@@ -214,6 +226,21 @@ if args.plot:
   # plt.show()
   if args.save:
     plt.savefig(f'./figs/{save_name}_losses_bar.png')
+
+  ts_regret_mean, ts_regret_ste = np.mean(ts_regrets, axis=0), np.std(ts_regrets, axis=0) / np.sqrt(len(ts_outputs))
+  # optimal_regret_mean, optimal_regret_ste = np.mean(optimal_regret, axis=0), np.std(optimal_regret, axis=0) / np.sqrt(len(ts_outputs))
+  df_regret_mean, df_regret_ste = np.mean(df_regrets, axis=0), np.std(df_regrets, axis=0) / np.sqrt(len(df_sim_outputs))
+  random_regret = np.array(optimal_opes) - random_mean[1]
+  random_regret_mean, random_regret_ste = np.mean(random_regret, axis=0), np.std(random_regret, axis=0) / np.sqrt(len(df_sim_outputs))
+  plt.figure()
+
+  regrets = [random_regret_mean, ts_regret_mean, df_regret_mean]
+  regret_errors = [random_regret_ste, ts_regret_ste, df_regret_ste]
+  plt.bar(labels[:-1], regrets, yerr=regret_errors, capsize=5, color=colors[:-1])
+  plt.title("Regret (Sim-OPE)")
+  plt.ylabel("Regret")
+  if args.save:
+    plt.savefig(f'./figs/{save_name}_regrets_bar.png')
 
   plt.figure()
   rewards = [random_mean[1], ts_test_mean[1], df_sim_test_mean[1], optimal_test_mean[1]]

@@ -14,6 +14,7 @@ sys.path.insert(0, "../")
 from itertools import combinations
 
 from dfl.config import N_ACTIONS, N_STATES, dim_dict, policy_map
+from dfl.mathprog_methods import bqp_to_optimize_index_both_states
 
 def nck(n, k):
     return math.factorial(n)/(math.factorial(k)*math.factorial(n-k))
@@ -47,21 +48,47 @@ def getRandomProbabilityDistribution(m):
     assert np.sum(diffs) == 1 and len(diffs) == m
     return diffs
 
-# def addRandomNoise(T_data, scale=0.8):
-#     n_benefs, n_states, n_actions, n_states = T_data.shape
-#     noise = tf.constant(np.random.randn(n_benefs, n_states, n_actions) * scale, dtype=tf.float32)
-#     noisy_T_data = T_data
-#     # import pdb; pdb.set_trace()
-#     noisy_T_data[:, :, :, 0].assign(noisy_T_data[:, :, :, 0] + noise)
-#     noisy_T_data[:, :, :, 1].assign(noisy_T_data[:, :, :, 1] + noise)
-#     # noisy_T_data[:, :, :, 0] = noisy_T_data[:, :, :, 0] + noise
-#     # noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
-#     noisy_T_data = tf.where(noisy_T_data < 0, 0, noisy_T_data)
-#     noisy_T_data = tf.where(noisy_T_data > 1, 1, noisy_T_data)
-#     # return tf.constant(noisy_T_data, dtype=tf.float32)
-#     return noisy_T_data
+def addAdversarialNoise(T_data, gamma, scale=0.1):
+    # senses = np.random.choice(['min','max'],2,replace=True)
+    senses = np.array(['min', 'min']) # TODO not sure what this should actually be
+    time_limit = 120
+    R = np.array([0, 1])
+    C = np.array([0, 1])
+    eps = 0.05
+    gamma = 0.9
+    adversarial_T_data = []
+    for benef_Ts in T_data.numpy():
+        p01p = benef_Ts[0, 0, 1]
+        p11p = benef_Ts[1, 0, 1]
+        p01a = benef_Ts[0, 1, 1]
+        p11a = benef_Ts[1, 1, 1]
+        # print(p01p)
+        # print(p11p)
+        # print(p01a)
+        # print(p11a)
 
-def addRandomNoise(T_data, scale=0.8):
+        p01p_range = [max(eps, p01p - scale/2), min(1 - eps, p01p + scale/2)]
+        p11p_range = [max(eps, p11p - scale/2), min(1 - eps, p11p + scale/2)]
+        p01a_range = [max(eps, p01a - scale/2), min(1 - eps, p01a + scale/2)]
+        p11a_range = [max(eps, p11a - scale/2), min(1 - eps, p11a + scale/2)]
+        # print('p01p_range', p01p_range)
+        # print('p11p_range', p11p_range)
+        # print('p01a_range', p01a_range)
+        # print('p11a_range', p11a_range)
+        try:
+        # TODO: check that these values are feasible
+            optimized_indexes_bqp, _, _, _, adversarial_Ts  = bqp_to_optimize_index_both_states(p01p_range, p11p_range, p01a_range, p11a_range,
+                                                                        R, C, senses=senses, gamma=gamma, time_limit=time_limit)
+        except:
+            import pdb; pdb.set_trace()
+            print('something is wrong')
+        
+        # expand adversarial_Ts into 8 instead of 4
+        adversarial_T_data.append(adversarial_Ts)
+    # return np.array(adversarial_T_data)
+    return tf.constant(adversarial_T_data, dtype=tf.float32)
+
+def addRandomNoise(T_data, scale=0.1):
     n_benefs, n_states, n_actions, n_states = T_data.shape
     noise = np.random.randn(n_benefs, n_states, n_actions) * scale
     noisy_T_data = T_data.numpy()

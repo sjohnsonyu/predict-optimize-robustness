@@ -15,7 +15,7 @@ from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss, euclideanLoss
 from dfl.ope import opeIS_parallel, opeSimulator
-from dfl.utils import addRandomNoise, flipClusterProbabilities
+from dfl.utils import addRandomNoise, flipClusterProbabilities, addAdversarialNoise
 from dfl.environments import POMDP2MDP
 
 from armman.offline_trajectory import get_offline_dataset
@@ -38,6 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=0, type=int, help='random seed for synthetic data generation.')
     parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
     parser.add_argument('--robust', default=None, type=str, help='method of robust training')
+    parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
 
     args = parser.parse_args()
     print('argparser arguments', args)
@@ -47,7 +48,7 @@ if __name__ == '__main__':
     L = 10
     K = 20
     n_states = 2
-    gamma = 0.99
+    gamma = 0.9
     target_policy_name = 'soft-whittle'
     beh_policy_name    = 'random'
     TS_WEIGHT=0.1
@@ -71,7 +72,7 @@ if __name__ == '__main__':
         H = 7
         K = int(225/n_instances)
         n_states = 2
-        gamma = 0.99
+        gamma = 0.9
         full_dataset = get_offline_dataset(beh_policy_name, L, seed)
         single_trajectory = True
         # For offline data, seed must be set here
@@ -128,7 +129,11 @@ if __name__ == '__main__':
                     n_full_states = n_states
 
                     if mode == 'test' or args.robust == 'add_noise':
-                        label = addRandomNoise(label, noise_scale)
+                        if args.adversarial == 1 and noise_scale > 0:
+                            label = addAdversarialNoise(label, gamma, noise_scale)
+                        else:
+                            label = addRandomNoise(label, noise_scale)
+                        # print("I'M USING ADVERSARIAL NOISE! UNDO IF YOU DON'T WANT THIS!!!!")
                         
                         ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
 
