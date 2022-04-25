@@ -62,6 +62,8 @@ if args.plot:
     # df_is_outputs = []
     df_sim_outputs = []
     ts_outputs = []
+    ts_allowed_seeds = []
+    df_allowed_seeds = []
     for sd in range(args.seed, args.seed + args.tr):
 
       # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
@@ -70,17 +72,24 @@ if args.plot:
 
       # with open (DF_IS_filename, 'rb') as df_is_file:
       #     df_is_outputs.append(pickle.load(df_is_file))
-
-      with open (df_sim_filename, 'rb') as df_sim_file:
-          df_sim_outputs.append(pickle.load(df_sim_file))
-
-      with open (ts_filename, 'rb') as ts_file:
-          ts_outputs.append(pickle.load(ts_file))
+      try:
+        with open (df_sim_filename, 'rb') as df_sim_file:
+            df_sim_outputs.append(pickle.load(df_sim_file))
+        df_allowed_seeds.append(sd)
+      except:
+        print(f'{df_sim_filename} does not exist')
+      try:
+        with open (ts_filename, 'rb') as ts_file:
+            ts_outputs.append(pickle.load(ts_file))
+        ts_allowed_seeds.append(sd)
+      except:
+        print(f'{ts_filename} does not exist')
 
 
     num_epochs = len(df_sim_outputs[0][0][mode])# - 1 ## Last entry is the OPE if GT is perfectly known
 
-    random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in range(args.seed, args.seed+args.tr)]
+    random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in ts_allowed_seeds]
+    # random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in range(args.seed, args.seed+args.tr)]
     random_mean, random_ste = np.mean(random_metrics, axis=0), np.std(random_metrics, axis=0) / np.sqrt(len(ts_outputs))
     
     ### Loss figure
@@ -104,6 +113,7 @@ if args.plot:
         df_sim_errors.append(np.std(df_sim_outputs_for_this_epoch)/np.sqrt(len(df_sim_outputs_for_this_epoch)))
         ts_errors.append(np.std(ts_outputs_for_this_epoch)/np.sqrt(len(ts_outputs_for_this_epoch)))
     
+    
     df_sim_means = np.array(df_sim_means)
     df_sim_errors = np.array(df_sim_errors)
     
@@ -126,7 +136,8 @@ if args.plot:
         plt.savefig(f'{curr_dir}/figs/'+save_name+'_'+mode+'_loss.png')
     # plt.show()
 
-
+    print('successful ts trials:', len(ts_outputs))
+    print('successful df trials:', len(df_sim_outputs))
     ### SIM-OPE figure
     plt.figure()
     
@@ -185,24 +196,34 @@ if args.plot:
   ts_regrets = []
   df_regrets = []
   optimal_opes = []
-  for sd in range(args.seed, args.seed+args.tr):
+  for sd_idx, sd in enumerate(df_allowed_seeds):
+  # for sd in range(args.seed, args.seed+args.tr):
     # Optimal selected epoch
-    optimal_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][2]['val'][:-1]) # Maximize SIM OPE
-    optimal_selected_metrics.append([0, df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]])
-    optimal_performance = df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]
+    optimal_selected_epoch = np.argmax(df_sim_outputs[sd_idx][2]['val'][:-1]) # Maximize SIM OPE
+    # optimal_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][2]['val'][:-1]) # Maximize SIM OPE
+    optimal_selected_metrics.append([0, df_sim_outputs[sd_idx][2]['test'][optimal_selected_epoch]])
+    # optimal_selected_metrics.append([0, df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]])
+    optimal_performance = df_sim_outputs[sd_idx][2]['test'][optimal_selected_epoch]
+    # optimal_performance = df_sim_outputs[sd-args.seed][2]['test'][optimal_selected_epoch]
     optimal_opes.append(optimal_performance)
 
     # Two-stage selected epoch
     print ('seed:', sd, 'out of', len(ts_outputs))
-    # ts_selected_epoch = np.argmin(ts_outputs[sd-args.seed][0]['val'][:-1]) # loss metric
-    ts_selected_epoch = np.argmax(ts_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
-    ts_selected_metrics.append([ts_outputs[sd-args.seed][i]['test'][ts_selected_epoch] for i in range(2)])
-    ts_regrets.append(optimal_performance - ts_outputs[sd-args.seed][1]['test'][ts_selected_epoch])
+    # # ts_selected_epoch = np.argmin(ts_outputs[sd-args.seed][0]['val'][:-1]) # loss metric
+    # ts_selected_epoch = np.argmax(ts_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
+    # ts_selected_metrics.append([ts_outputs[sd-args.seed][i]['test'][ts_selected_epoch] for i in range(2)])
+    # ts_regrets.append(optimal_performance - ts_outputs[sd-args.seed][1]['test'][ts_selected_epoch])
+    ts_selected_epoch = np.argmax(ts_outputs[sd_idx][1]['val'][:-1]) # Maximize SIM OPE
+    ts_selected_metrics.append([ts_outputs[sd_idx][i]['test'][ts_selected_epoch] for i in range(2)])
+    ts_regrets.append(optimal_performance - ts_outputs[sd_idx][1]['test'][ts_selected_epoch])
 
-    # DF-sim selected epoch
-    df_sim_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
-    df_sim_selected_metrics.append([df_sim_outputs[sd-args.seed][i]['test'][df_sim_selected_epoch] for i in range(2)])
-    df_regrets.append(optimal_performance - df_sim_outputs[sd-args.seed][1]['test'][df_sim_selected_epoch])
+    # # DF-sim selected epoch
+    # df_sim_selected_epoch = np.argmax(df_sim_outputs[sd-args.seed][1]['val'][:-1]) # Maximize SIM OPE
+    # df_sim_selected_metrics.append([df_sim_outputs[sd-args.seed][i]['test'][df_sim_selected_epoch] for i in range(2)])
+    # df_regrets.append(optimal_performance - df_sim_outputs[sd-args.seed][1]['test'][df_sim_selected_epoch])
+    df_sim_selected_epoch = np.argmax(df_sim_outputs[sd_idx][1]['val'][:-1]) # Maximize SIM OPE
+    df_sim_selected_metrics.append([df_sim_outputs[sd_idx][i]['test'][df_sim_selected_epoch] for i in range(2)])
+    df_regrets.append(optimal_performance - df_sim_outputs[sd_idx][1]['test'][df_sim_selected_epoch])
 
 
   ts_selected_metrics = np.array(ts_selected_metrics)
