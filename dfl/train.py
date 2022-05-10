@@ -23,26 +23,13 @@ from armman.offline_trajectory import get_offline_dataset
 # TODO put into a constants file
 OPE_SIM_N_TRIALS = 100
 # OPTIMAL_EPSILON = 0.01
-OPTIMAL_EPSILON = 0.05
-print('using epsilon =', OPTIMAL_EPSILON)
+OPTIMAL_EPSILON = 0.1
+# OPTIMAL_EPSILON = 0.05
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='ARMMAN decision-focused learning')
-    parser.add_argument('--method', default='TS', type=str, help='TS (two-stage learning) or DF (decision-focused learning).')
-    parser.add_argument('--env', default='general', type=str, help='general (MDP) or POMDP.')
-    parser.add_argument('--data', default='synthetic', type=str, help='synthetic or pilot')
-    parser.add_argument('--sv', default='.', type=str, help='save string name')
-    parser.add_argument('--epochs', default=50, type=int, help='num epochs')
-    parser.add_argument('--instances', default=10, type=int, help='num instances')
-    parser.add_argument('--ope', default='sim', type=str, help='importance sampling (IS) or simulation-based (sim).')
-    parser.add_argument('--seed', default=0, type=int, help='random seed for synthetic data generation.')
-    parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
-    parser.add_argument('--robust', default=None, type=str, help='method of robust training')
-    parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
-
-    args = parser.parse_args()
+def main(args):
     print('argparser arguments', args)
     print ("OPE SETTING IS: ", args.ope)
+    print('using epsilon =', args.eps)
     n_benefs = 100
     n_trials = 100
     L = 10
@@ -133,7 +120,6 @@ if __name__ == '__main__':
                             label = addAdversarialNoise(label, gamma, noise_scale)
                         else:
                             label = addRandomNoise(label, noise_scale)
-                        # print("I'M USING ADVERSARIAL NOISE! UNDO IF YOU DON'T WANT THIS!!!!")
                         
                         ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
 
@@ -207,6 +193,21 @@ if __name__ == '__main__':
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
             pickle.dump([overall_loss, overall_ope_sim, overall_ope_sim_optimal], filename)
-            # pickle.dump([overall_loss, overall_ope, overall_ope_sim, overall_ope_IS_optimal, overall_ope_sim_optimal], filename)
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='ARMMAN decision-focused learning')
+    parser.add_argument('--method', default='TS', type=str, help='TS (two-stage learning) or DF (decision-focused learning).')
+    parser.add_argument('--env', default='general', type=str, help='general (MDP) or POMDP.')
+    parser.add_argument('--data', default='synthetic', type=str, help='synthetic or pilot')
+    parser.add_argument('--sv', default='.', type=str, help='save string name')
+    parser.add_argument('--epochs', default=50, type=int, help='num epochs')
+    parser.add_argument('--instances', default=10, type=int, help='num instances')
+    parser.add_argument('--ope', default='sim', type=str, help='importance sampling (IS) or simulation-based (sim).')
+    parser.add_argument('--seed', default=0, type=int, help='random seed for synthetic data generation.')
+    parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
+    parser.add_argument('--robust', default=None, type=str, help='method of robust training')
+    parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
+    parser.add_argument('--eps', default=OPTIMAL_EPSILON, type=float, help='epsilon used for calculating soft top k')
 
+    args = parser.parse_args()
+    main()
