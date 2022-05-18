@@ -43,41 +43,30 @@ attempts = defaultdict(int)
 successes = defaultdict(int)
 
 ### Launch new computational experiments for the specified settings if True
-for eps in EPSILONS:
-    print('EPSILON:', eps)
-    args_copy = copy(args)
-    args_copy.eps = eps
-    for sd in range(args.seed, args.seed+args.tr):
-        args_copy.sd = sd
-        save_name = f'exp_eps_{eps}'
-        # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
-        curr_dir = os.path.abspath(os.getcwd())
-        df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
-        ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
-        # df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
-        # ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
+eps = args.eps
+print('EPSILON:', eps)
+for sd in range(args.seed, args.seed+args.tr):
+    args.sd = sd
+    save_name = f'exp_eps_{eps}'
+    curr_dir = os.path.abspath(os.getcwd())
+    df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
+    ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
+    print ('Seed: ', sd)
+    print ('Starting DF Simu based to be saved as:', df_sim_filename)
+    attempts[eps] += 1
+    try:
+        train_main(args)
+        successes[eps] += 1
+    except Exception as e:
+        if isinstance(e, ValueError):
+            # it failed...
+            pass
+        elif isinstance(e, IndexError):
+            # different error, so skip
+            attempts[eps] -= 1
 
-        robust_clause = '' if not args.robust == 'add_noise' else '--robust add_noise'
-        print ('Starting seed: ', sd)
-        # print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
-        # subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
-        print ('Starting DF Simu based to be saved as:', df_sim_filename)
-        attempts[eps] += 1
-        try:
-            train_main(args)
-            successes[eps] += 1
-            # os.system(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial} --eps {eps}', shell=True)
-        except Exception as e:
-            if isinstance(e, ValueError):
-                # it failed...
-                pass
-            elif isinstance(e, IndexError):
-                # different error, so skip
-                attempts[eps] -= 1
+print('successes:', successes)
+print('attempts:', attempts)
 
-    print('successes:', successes)
-    print('attempts:', attempts)
-
-print('finished!')
-with open('eps_summary.json', 'w') as f:
+with open(f'eps_summary_{eps}.json', 'w') as f:
     json.dump([successes, attempts], f)
