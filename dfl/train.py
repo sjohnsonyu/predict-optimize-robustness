@@ -7,8 +7,9 @@ import sys
 import os
 import pickle
 import random
+sys.path.insert(0, os.path.split(sys.path[0])[0])
 sys.path.insert(0, "../")
-
+print('current working dir:', os.getcwd())
 from dfl.model import ANN
 from dfl.trajectory import getSimulatedTrajectories
 from dfl.synthetic import generateDataset
@@ -25,6 +26,9 @@ OPE_SIM_N_TRIALS = 100
 # OPTIMAL_EPSILON = 0.01
 OPTIMAL_EPSILON = 0.1
 # OPTIMAL_EPSILON = 0.05
+#OPTIMAL_EPSILON = 0.05
+#OPTIMAL_EPSILON = 0.1
+#print('using epsilon =', OPTIMAL_EPSILON)
 
 def main(args):
     print('argparser arguments', args)
@@ -127,7 +131,7 @@ def main(args):
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
-                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=OPTIMAL_EPSILON)
+                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=args.eps)
 
                 else: # no label available in the pilot dataset
                     w_optimal = tf.zeros((n_benefs, n_full_states)) # random
@@ -153,7 +157,7 @@ def main(args):
                         w = tf.zeros((n_benefs, n_full_states))
 
                     # evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
-                    evaluation_epsilon = OPTIMAL_EPSILON
+                    evaluation_epsilon = args.eps
                     ope_sim = ope_simulator(w, K, epsilon=evaluation_epsilon)
 
                     performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
@@ -180,15 +184,17 @@ def main(args):
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
             overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))
 
-    folder_path = 'pretrained/{}'.format(args.data)
-
+    folder_path = args.sv + '/pretrained/{}'.format(args.data)
+    folder_path = f'~/predict-optimize-robustness/dfl/test_results/{args.data}'
+    folder_path = os.getcwd() + '/' + args.data
+    folder_path = './' + args.data
     if not os.path.exists(folder_path):
         os.mkdir(folder_path)
 
     model_path = '{}/{}.pickle'.format(folder_path, args.method)
     with open(model_path, 'wb') as f:
         pickle.dump((train_dataset, val_dataset, test_dataset, model_list), f)
-
+        print('writing model to', model_path)
     if not(args.sv == '.'):
         ### Output to be saved, else do nothing. 
         with open(args.sv, 'wb') as filename:
@@ -210,4 +216,4 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=OPTIMAL_EPSILON, type=float, help='epsilon used for calculating soft top k')
 
     args = parser.parse_args()
-    main()
+    main(args)

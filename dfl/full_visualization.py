@@ -40,6 +40,7 @@ if args.compute:
     # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
     curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl'
     df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
+    print('save_name is', save_name)
     ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
     # df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
     # ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
@@ -88,7 +89,7 @@ if args.plot:
 
     num_epochs = len(df_sim_outputs[0][0][mode])# - 1 ## Last entry is the OPE if GT is perfectly known
 
-    random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in ts_allowed_seeds]
+    random_metrics = [[ts_outputs[j][i][mode][0] for i in range(3)] for j in range(len(ts_allowed_seeds))]
     # random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in range(args.seed, args.seed+args.tr)]
     random_mean, random_ste = np.mean(random_metrics, axis=0), np.std(random_metrics, axis=0) / np.sqrt(len(ts_outputs))
     
