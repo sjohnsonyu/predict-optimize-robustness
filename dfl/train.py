@@ -127,7 +127,7 @@ def main(args):
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
-                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=OPTIMAL_EPSILON)
+                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=args.eps)
 
                 else: # no label available in the pilot dataset
                     w_optimal = tf.zeros((n_benefs, n_full_states)) # random
@@ -153,7 +153,7 @@ def main(args):
                         w = tf.zeros((n_benefs, n_full_states))
 
                     # evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
-                    evaluation_epsilon = OPTIMAL_EPSILON
+                    evaluation_epsilon = args.eps
                     ope_sim = ope_simulator(w, K, epsilon=evaluation_epsilon)
 
                     performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
@@ -210,4 +210,4 @@ if __name__ == '__main__':
     parser.add_argument('--eps', default=OPTIMAL_EPSILON, type=float, help='epsilon used for calculating soft top k')
 
     args = parser.parse_args()
-    main()
+    main(args)

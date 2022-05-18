@@ -24,6 +24,7 @@ class baseEnv:
             if np.isnan(prob_matrix.sum()):
                 raise
             s = prob_matrix.cumsum(axis=1)
+            s[:, -1] = 1  # float arithmetic can result in last col != 1. ensure it's 1!
             r = np.random.rand(prob_matrix.shape[0])
             k = (s < np.expand_dims(r, 1)).sum(axis=1)
             return k
