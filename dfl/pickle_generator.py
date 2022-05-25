@@ -22,7 +22,10 @@ def parse_for_df_or_ts(f, line, losses, rewards, opt_rewards):
         line = f.readline()
     if line == '': return -1, -1
 
-    while "Epoch" in line and line != '':
+    while ("Epoch" in line and line != '') or 'Using license file' in line or 'Set parameter TokenServer' in line:
+        if 'Using license file' in line or 'Set parameter TokenServer' in line:
+            line = f.readline()
+            continue
         epoch_start_idx = line.find("Epoch ") + len("Epoch ")
         epoch_end_idx = line.find(',', epoch_start_idx)
         epoch_num = int(line[epoch_start_idx:epoch_end_idx])
