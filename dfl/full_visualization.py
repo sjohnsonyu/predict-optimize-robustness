@@ -20,13 +20,17 @@ parser.add_argument('--name', default='.', type=str, help='Special string name.'
 parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
 parser.add_argument('--robust', default=None, type=str, help='method of robust training')
 parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
-
+parser.add_argument('--eps', default=0.1, type=float, help='epsilon used for calculating soft top k')
+parser.add_argument('--run_one', default=None, type=str, help='df or ts if you want to run just one, else None to run both')
 
 args=parser.parse_args()
 
 args.save=bool(args.save)
 args.plot=bool(args.plot)
 args.compute=bool(args.compute)
+
+assert args.run_one in [None, 'ts', 'df']
+assert not (args.compute and args.run_one and args.plot)
 
 if not args.name == '.':
   save_name = args.name
@@ -37,22 +41,19 @@ if args.compute:
   ### Launch new computational experiments for the specified settings if True 
   for sd in range(args.seed, args.seed+args.tr):
  
-    # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
     curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl'
     df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
     print('save_name is', save_name)
     ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
-    # df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
-    # ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
 
     robust_clause = '' if not args.robust == 'add_noise' else '--robust add_noise'
     print ('Starting seed: ', sd)
-    # print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
-    # subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
-    print ('Starting DF Simu based to be saved as:', df_sim_filename)
-    subprocess.run(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
-    print ('Starting TS to be saved as:', ts_filename)
-    subprocess.run(f'python3 {curr_dir}/train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
+    if args.run_one is None or args.run_one == 'df':
+        print ('Starting DF Simu based to be saved as:', df_sim_filename)
+        subprocess.run(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial} --eps {args.eps}', shell=True)
+    if args.run_one is None or args.run_one == 'ts':
+       print ('Starting TS to be saved as:', ts_filename)
+       subprocess.run(f'python3 {curr_dir}/train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial} --eps {args.eps}', shell=True)
     print ('BOTH DONE')
 
 
@@ -60,19 +61,15 @@ if args.plot:
   ### Plot figures for the specified settings if True 
   modes = ['train', 'val', 'test']
   for mode in modes:
-    # df_is_outputs = []
     df_sim_outputs = []
     ts_outputs = []
     ts_allowed_seeds = []
     df_allowed_seeds = []
     for sd in range(args.seed, args.seed + args.tr):
 
-      # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
       df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
       ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
-
-      # with open (DF_IS_filename, 'rb') as df_is_file:
-      #     df_is_outputs.append(pickle.load(df_is_file))
+      
       try:
         with open (df_sim_filename, 'rb') as df_sim_file:
             df_sim_outputs.append(pickle.load(df_sim_file))

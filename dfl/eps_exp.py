@@ -25,7 +25,7 @@ parser.add_argument('--name', default='.', type=str, help='Special string name.'
 parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
 parser.add_argument('--robust', default=None, type=str, help='method of robust training')
 parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
-parser.add_argument('--method', default='TS', type=str, help='TS (two-stage learning) or DF (decision-focused learning).')
+parser.add_argument('--method', default='DF', type=str, help='TS (two-stage learning) or DF (decision-focused learning).')
 parser.add_argument('--env', default='general', type=str, help='general (MDP) or POMDP.')
 parser.add_argument('--data', default='synthetic', type=str, help='synthetic or pilot')
 parser.add_argument('--sv', default='.', type=str, help='save string name')
@@ -45,13 +45,13 @@ successes = defaultdict(int)
 ### Launch new computational experiments for the specified settings if True
 eps = args.eps
 print('EPSILON:', eps)
-for sd in range(args.seed, args.seed+args.tr):
-    args.sd = sd
+for seed in range(args.seed, args.seed+args.tr):
+    args.seed = seed
     save_name = f'exp_eps_{eps}'
     curr_dir = os.path.abspath(os.getcwd())
-    df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
-    ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
-    print ('Seed: ', sd)
+    df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{seed}.pickle'
+    ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{seed}.pickle'
+    print ('Seed: ', seed)
     print ('Starting DF Simu based to be saved as:', df_sim_filename)
     attempts[eps] += 1
     try:
@@ -60,7 +60,7 @@ for sd in range(args.seed, args.seed+args.tr):
     except Exception as e:
         if isinstance(e, ValueError):
             # it failed...
-            pass
+            print(seed, "failed...")
         elif isinstance(e, IndexError):
             # different error, so skip
             attempts[eps] -= 1
@@ -68,6 +68,6 @@ for sd in range(args.seed, args.seed+args.tr):
 print('successes:', successes)
 print('attempts:', attempts)
 
-with open(f'eps_summary_{eps}.json', 'w') as f:
+with open(f'eps_summary_{eps}_{save_name}.json', 'w') as f:
     json.dump([successes, attempts], f)
 
