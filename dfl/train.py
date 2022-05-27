@@ -7,6 +7,7 @@ import sys
 import os
 import pickle
 import random
+
 sys.path.insert(0, "../")
 
 from dfl.model import ANN
@@ -22,9 +23,8 @@ from armman.offline_trajectory import get_offline_dataset
 
 # TODO put into a constants file
 OPE_SIM_N_TRIALS = 100
-# OPTIMAL_EPSILON = 0.01
 OPTIMAL_EPSILON = 0.1
-# OPTIMAL_EPSILON = 0.05
+
 
 def main(args):
     print('argparser arguments', args)
@@ -40,7 +40,7 @@ def main(args):
     beh_policy_name    = 'random'
     TS_WEIGHT=0.1
     noise_scale = args.noise_scale
-
+    
     # Environment setup
     env = args.env
     H = 10
@@ -105,7 +105,9 @@ def main(args):
             if mode == 'train':
                 dataset = tqdm.tqdm(dataset)
 
+            counter = -1
             for (feature, label, raw_R_data, traj, ope_simulator, _, state_record, action_record, reward_record) in dataset:
+                counter += 1
                 feature = tf.constant(feature, dtype=tf.float32)
                 raw_R_data = tf.constant(raw_R_data, dtype=tf.float32)
 
@@ -120,13 +122,14 @@ def main(args):
                             label = addAdversarialNoise(label, gamma, noise_scale)
                         else:
                             label = addRandomNoise(label, noise_scale)
-                        
-                        ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H)
+
+                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, do_nothing=args.do_nothing)
 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
                     optimal_loss = euclideanLoss(T_data, label)
                     # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
+                    # TODO: how to specify "do nothing"?
                     ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=args.eps)
 
                 else: # no label available in the pilot dataset
@@ -147,14 +150,15 @@ def main(args):
 
                     # Batch Whittle index computation
                     w = newWhittleIndex(T_data, R_data)
+                    if np.any(np.isnan(w)):
+                        breakpoint()
+                        print("lowly normal w...")
                     w = tf.reshape(w, (n_benefs, n_full_states))
 
                     if epoch == total_epoch:
                         w = tf.zeros((n_benefs, n_full_states))
 
-                    # evaluation_epsilon = 1.0 / 10 if mode == 'train' else 0.01  # TODO: do we want to change between train and test?
-                    evaluation_epsilon = args.eps
-                    ope_sim = ope_simulator(w, K, epsilon=evaluation_epsilon)
+                    ope_sim = ope_simulator(w, K, epsilon=args.eps)
 
                     performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
 
@@ -166,6 +170,7 @@ def main(args):
                         grad = tape.gradient(performance, model.trainable_variables)
                     else:
                         raise NotImplementedError
+                    
                     optimizer.apply_gradients(zip(grad, model.trainable_variables))
 
                 loss_list.append(loss)
@@ -208,6 +213,9 @@ if __name__ == '__main__':
     parser.add_argument('--robust', default=None, type=str, help='method of robust training')
     parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
     parser.add_argument('--eps', default=OPTIMAL_EPSILON, type=float, help='epsilon used for calculating soft top k')
+    # parser.add_argument('--do_nothing', default=0, type=int, )
+    parser.add_argument('--do_nothing', action='store_true', help='include if lower bound baseline, otherwise don\'t add!')
+    parser.set_defaults(do_nothing=False)
 
     args = parser.parse_args()
     main(args)

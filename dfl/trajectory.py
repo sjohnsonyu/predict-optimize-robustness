@@ -83,7 +83,7 @@ def simulateTrajectories(args, env, k, w, gamma, start_state=None, policies=[0],
   
     return simulated_rewards, state_record, action_record, reward_record, traj
 
-def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=[3], epsilon=0.1):
+def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=[3], epsilon=0.1, do_nothing=False):
     # Parallel implementation of simulation
 
     ##### Unpack arguments
@@ -137,9 +137,12 @@ def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=
                 reward_record[tr, pol_idx, timestep, :] = np.copy(tmp_rewards)
             
                 ## Transition to next state and get rewards
+
+                if do_nothing:
+                    tmp_actions = np.zeros(tmp_actions.shape)
+                
                 tmp_next_states = env.takeActions(tmp_states, tmp_actions)
                 traj[tr, pol_idx, timestep, dim_dict['next_state'], :] = np.copy(tmp_next_states)
-
                 # rewards = np.copy(states)
                 traj[tr, pol_idx, timestep, dim_dict['reward'], :] = np.copy(tmp_rewards)
                 
@@ -157,7 +160,7 @@ def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=
 
 def getSimulatedTrajectories(n_benefs = 10, T = 5, K = 3, n_trials = 10, gamma = 1, epsilon=0.1,
                              T_data=None, R_data=None, w=None, start_state=None, H=10, debug=False, replace=False,
-                             policies=[0], fast=False):
+                             policies=[0], fast=False, do_nothing=False):
 
     # Set args params
     args = {}
@@ -181,7 +184,7 @@ def getSimulatedTrajectories(n_benefs = 10, T = 5, K = 3, n_trials = 10, gamma =
 
     # Run simulation
     if fast: # This only supports policy_id = 3
-        simulated_rewards, state_record, action_record, reward_record, traj = fastSimulateTrajectories(args=args, env=env, k=K, w=w, gamma=gamma, start_state=start_state, policies=policies, epsilon=epsilon)
+        simulated_rewards, state_record, action_record, reward_record, traj = fastSimulateTrajectories(args=args, env=env, k=K, w=w, gamma=gamma, start_state=start_state, policies=policies, epsilon=epsilon, do_nothing=do_nothing)
     else:
         simulated_rewards, state_record, action_record, reward_record, traj = simulateTrajectories(args=args, env=env, k=K, w=w, gamma=gamma, start_state=start_state, policies=policies, epsilon=epsilon)
 

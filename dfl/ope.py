@@ -163,21 +163,22 @@ def opeIS_parallel(state_record, action_record, reward_record, w, n_benefs, T, K
 
 # Simulation-based OPE (differentiable and parallelizable)
 class opeSimulator(object):
-    def __init__(self, beh_traj, n_benefs, T, m, OPE_sim_n_trials, gamma, beh_policy_name, T_data, R_data, env='general', H=None, use_informed_prior=False):
+    def __init__(self, beh_traj, n_benefs, T, m, OPE_sim_n_trials, gamma, beh_policy_name, T_data, R_data, env='general', H=None, use_informed_prior=False, do_nothing=False):
         self.n_benefs = n_benefs
         self.T = T
         self.m = m
         self.H = H
         self.OPE_sim_n_trials = OPE_sim_n_trials
         self.gamma = gamma
+        self.do_nothing = do_nothing
 
         policy_id = policy_map[beh_policy_name]
         # self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
         if env == 'general':
             self.emp_T_data = T_data # Directly using the real T_data  # uncomment to do online policy evaluation
             self.emp_R_data = R_data # Reward list is explicitly given in the MDP version
-        else:
-            self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
+        # else:
+        #     self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
 
     def __call__(self, w, K, epsilon=0.1):
         self.K = K
@@ -191,7 +192,7 @@ class opeSimulator(object):
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                     n_benefs=self.n_benefs, T=self.T, K=self.K, n_trials=self.OPE_sim_n_trials, gamma=self.gamma, epsilon=self.epsilon, 
                                                     T_data=self.emp_T_data, R_data=self.emp_R_data,
-                                                    w=w.numpy(), policies=[3], fast=True
+                                                    w=w.numpy(), policies=[3], fast=True, do_nothing=self.do_nothing
                                                     )
         
         average_reward = tf.reduce_mean(tf.convert_to_tensor(simulated_rewards, dtype=tf.float32))
