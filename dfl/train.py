@@ -123,7 +123,7 @@ def main(args):
                         else:
                             label = addRandomNoise(label, noise_scale)
 
-                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, do_nothing=args.do_nothing)
+                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, do_nothing=args.do_nothing, random_actions=args.random_actions)
 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
@@ -150,9 +150,6 @@ def main(args):
 
                     # Batch Whittle index computation
                     w = newWhittleIndex(T_data, R_data)
-                    if np.any(np.isnan(w)):
-                        breakpoint()
-                        print("lowly normal w...")
                     w = tf.reshape(w, (n_benefs, n_full_states))
 
                     if epoch == total_epoch:
@@ -216,6 +213,8 @@ if __name__ == '__main__':
     # parser.add_argument('--do_nothing', default=0, type=int, )
     parser.add_argument('--do_nothing', action='store_true', help='include if lower bound baseline, otherwise don\'t add!')
     parser.set_defaults(do_nothing=False)
+    parser.add_argument('--random_actions', action='store_true', help='take random actions')
+    parser.set_defaults(random_actions=False)
 
     args = parser.parse_args()
     main(args)
