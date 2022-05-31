@@ -137,7 +137,6 @@ def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=
                 reward_record[tr, pol_idx, timestep, :] = np.copy(tmp_rewards)
 
                 ## Transition to next state and get rewards
-                breakpoint()
                 if do_nothing:
                     tmp_actions = np.zeros(tmp_actions.shape)
                 elif random_actions:
