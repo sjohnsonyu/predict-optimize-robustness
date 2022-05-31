@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.split(sys.path[0])[0])
 sys.path.insert(0, "../")
 print('current working dir:', os.getcwd())
 from dfl.model import ANN
-from dfl.trajectory import getSimulatedTrajectories
 from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss, euclideanLoss
@@ -123,7 +122,7 @@ def main(args):
                         else:
                             label = addRandomNoise(label, noise_scale)
 
-                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, do_nothing=args.do_nothing, random_actions=args.random_actions)
+                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, baseline_mode=args.baseline_mode)
 
                     w_optimal = newWhittleIndex(label, R_data)
                     w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
@@ -216,11 +215,12 @@ if __name__ == '__main__':
     parser.add_argument('--robust', default=None, type=str, help='method of robust training')
     parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
     parser.add_argument('--eps', default=OPTIMAL_EPSILON, type=float, help='epsilon used for calculating soft top k')
+    parser.add_argument('--baseline_mode', default=None, type=str, help='special baseline policy (do_nothing, random_actions)')
     # parser.add_argument('--do_nothing', default=0, type=int, )
-    parser.add_argument('--do_nothing', action='store_true', help='include if lower bound baseline, otherwise don\'t add!')
-    parser.set_defaults(do_nothing=False)
-    parser.add_argument('--random_actions', action='store_true', help='take random actions')
-    parser.set_defaults(random_actions=False)
+    # parser.add_argument('--do_nothing', action='store_true', help='include if lower bound baseline, otherwise don\'t add!')
+    # parser.set_defaults(do_nothing=False)
+    # parser.add_argument('--random_actions', action='store_true', help='take random actions')
+    # parser.set_defaults(random_actions=False)
 
     args = parser.parse_args()
     main(args)

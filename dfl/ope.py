@@ -163,15 +163,14 @@ def opeIS_parallel(state_record, action_record, reward_record, w, n_benefs, T, K
 
 # Simulation-based OPE (differentiable and parallelizable)
 class opeSimulator(object):
-    def __init__(self, beh_traj, n_benefs, T, m, OPE_sim_n_trials, gamma, beh_policy_name, T_data, R_data, env='general', H=None, use_informed_prior=False, do_nothing=False, random_actions=False):
+    def __init__(self, beh_traj, n_benefs, T, m, OPE_sim_n_trials, gamma, beh_policy_name, T_data, R_data, env='general', H=None, use_informed_prior=False, baseline_mode=None):
         self.n_benefs = n_benefs
         self.T = T
         self.m = m
         self.H = H
         self.OPE_sim_n_trials = OPE_sim_n_trials
         self.gamma = gamma
-        self.do_nothing = do_nothing
-        self.random_actions = random_actions
+        self.baseline_mode = baseline_mode
 
         policy_id = policy_map[beh_policy_name]
         # self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
@@ -193,7 +192,7 @@ class opeSimulator(object):
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                     n_benefs=self.n_benefs, T=self.T, K=self.K, n_trials=self.OPE_sim_n_trials, gamma=self.gamma, epsilon=self.epsilon, 
                                                     T_data=self.emp_T_data, R_data=self.emp_R_data,
-                                                    w=w.numpy(), policies=[3], fast=True, do_nothing=self.do_nothing, random_actions=self.random_actions
+                                                    w=w.numpy(), policies=[3], fast=True, baseline_mode=self.baseline_mode
                                                     )
         
         average_reward = tf.reduce_mean(tf.convert_to_tensor(simulated_rewards, dtype=tf.float32))
