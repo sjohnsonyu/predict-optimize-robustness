@@ -133,14 +133,16 @@ def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=
             next_states_list = []
             for tr, tmp_states, tmp_actions in zip(range(ntr), states, actions):
                 ## Get rewards
-                tmp_rewards = env.getRewards(tmp_states, tmp_actions)
-                reward_record[tr, pol_idx, timestep, :] = np.copy(tmp_rewards)
 
-                ## Transition to next state and get rewards
                 if do_nothing:
                     tmp_actions = np.zeros(tmp_actions.shape)
                 elif random_actions:
                     np.random.shuffle(tmp_actions)
+
+                tmp_rewards = env.getRewards(tmp_states, tmp_actions)
+                reward_record[tr, pol_idx, timestep, :] = np.copy(tmp_rewards)
+
+                ## Transition to next state and get rewards
                 
                 tmp_next_states = env.takeActions(tmp_states, tmp_actions)
                 traj[tr, pol_idx, timestep, dim_dict['next_state'], :] = np.copy(tmp_next_states)
