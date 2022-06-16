@@ -173,25 +173,38 @@ class opeSimulator(object):
         self.baseline_mode = baseline_mode
 
         policy_id = policy_map[beh_policy_name]
-        # self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
-        if env == 'general':
-            self.emp_T_data = T_data # Directly using the real T_data  # uncomment to do online policy evaluation
-            self.emp_R_data = R_data # Reward list is explicitly given in the MDP version
-        # else:
-        #     self.emp_T_data, self.emp_R_data = getEmpTransitionMatrix(traj=beh_traj, policy_id=policy_id, n_benefs=n_benefs, m=m, env=env, H=H, use_informed_prior=use_informed_prior)
+        self.T_data = T_data # Directly using the real T_data  # uncomment to do online policy evaluation
+        self.R_data = R_data # Reward list is explicitly given in the MDP version
 
-    def __call__(self, w, K, epsilon=0.1):
+        self.eval_T_data = self.T_data
+
+    def __call__(self, w, K, eval_T_data=None, epsilon=0.1):
         self.K = K
         self.epsilon = epsilon
+
+        if eval_T_data == None:
+            self.eval_T_data = self.T_data
+        else:
+            self.eval_T_data = eval_T_data
+
         compute = tf.custom_gradient(lambda x: self._compute(x))
         return compute(w)
+
+    def perturbation(self, w, K, eval_T_data, epsilon=0.1):
+        self.K = K
+        self.epsilon = epsilon
+        self.w = tf.stop_gradient(w)
+
+        compute = tf.custom_gradient(lambda T_data: self._compute_perturbation(T_data))
+        return compute(eval_T_data)
+
 
     def _compute(self, w_raw):
         w = tf.stop_gradient(w_raw)
         # Fast soft Whittle simulation
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                     n_benefs=self.n_benefs, T=self.T, K=self.K, n_trials=self.OPE_sim_n_trials, gamma=self.gamma, epsilon=self.epsilon, 
-                                                    T_data=self.emp_T_data, R_data=self.emp_R_data,
+                                                    T_data=self.eval_T_data, R_data=self.R_data,
                                                     w=w.numpy(), policies=[3], fast=True, baseline_mode=self.baseline_mode
                                                     )
         
@@ -216,6 +229,42 @@ class opeSimulator(object):
             del tmp_tape
 
             return dtotal_dw * dsoln
+
+        return tf.stop_gradient(average_reward), gradient_function
+
+    def _compute_perturbation(self, T_data):
+        # Fast soft Whittle simulation
+        traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
+                                                    n_benefs=self.n_benefs, T=self.T, K=self.K, n_trials=self.OPE_sim_n_trials, gamma=self.gamma, epsilon=self.epsilon, 
+                                                    T_data=T_data.numpy(), R_data=self.R_data,
+                                                    w=self.w.numpy(), policies=[3], fast=True, baseline_mode=self.baseline_mode
+                                                    )
+        
+        average_reward = tf.reduce_mean(tf.convert_to_tensor(simulated_rewards, dtype=tf.float32))
+
+        def gradient_function(dsoln):
+            gamma_list = np.reshape(self.gamma ** np.arange(self.T), (1,1,self.T,1))
+            discounted_reward_record = reward_record * gamma_list
+            cumulative_rewards = tf.math.cumsum(tf.convert_to_tensor(discounted_reward_record, dtype=tf.float32), axis=2, reverse=True)
+            
+            indices = tf.stack([state_record[:,0,:-1,:], action_record[:,0,:-1,:], state_record[:,0,1:,:]], axis=-1)
+            probs_raw = [] # tf.zeros((self.OPE_sim_n_trials, self.T-1, self.n_benefs))
+            with tf.GradientTape() as tmp_tape:
+                tmp_tape.watch(T_data)
+                for i in range(self.n_benefs):
+                    tmp_probs = tf.gather_nd(T_data[i], tf.reshape(tf.cast(indices[:,:,i,:], dtype=tf.int32), (-1,3)))
+                    probs_raw.append(tf.reshape(tmp_probs, (self.OPE_sim_n_trials, self.T-1)))
+
+                probs_raw = tf.stack(probs_raw, axis=-1)
+                # tf.reshape(getProbs(state_record[:,0,:,:].reshape(-1, self.n_benefs), policy=3, ts=None, w=w, k=self.K), (-1, 1, self.T, self.n_benefs))
+                logprobs = tf.math.log(probs_raw)
+                
+                total_reward = tf.reduce_mean(tf.reduce_sum(cumulative_rewards[:,0,:-1,:] * logprobs[:,:,:], axis=(-1)))
+
+            dtotal_dT = tmp_tape.gradient(total_reward, T_data)
+            del tmp_tape
+
+            return dtotal_dT * dsoln
 
         return tf.stop_gradient(average_reward), gradient_function
 

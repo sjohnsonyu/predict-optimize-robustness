@@ -15,7 +15,7 @@ from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
 from dfl.utils import getSoftTopk, twoStageNLLLoss, euclideanLoss
 from dfl.ope import opeIS_parallel, opeSimulator
-from dfl.utils import addRandomNoise, flipClusterProbabilities, addAdversarialNoise
+from dfl.utils import addRandomNoise, flipClusterProbabilities, addAdversarialNoise, addAdversarialNoiseNew
 from dfl.environments import POMDP2MDP
 
 from armman.offline_trajectory import get_offline_dataset
@@ -111,30 +111,9 @@ def main(args):
                 raw_R_data = tf.constant(raw_R_data, dtype=tf.float32)
 
                 # ================== computing optimal solution ===================
-                if args.data == 'synthetic':
-                    label = tf.constant(label, dtype=tf.float32)
-                    T_data, R_data = label, raw_R_data
-                    n_full_states = n_states
-
-                    if mode == 'test' or args.robust == 'add_noise':
-                        if args.adversarial == 1 and noise_scale > 0:
-                            label = addAdversarialNoise(label, gamma, noise_scale)
-                        else:
-                            label = addRandomNoise(label, noise_scale)
-
-                    ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, baseline_mode=args.baseline_mode)
-
-                    w_optimal = newWhittleIndex(label, R_data)
-                    w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
-                    optimal_loss = euclideanLoss(T_data, label)
-                    # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
-                    # TODO: how to specify "do nothing"?
-                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=args.eps)
-
-                else: # no label available in the pilot dataset
-                    w_optimal = tf.zeros((n_benefs, n_full_states)) # random
-                    optimal_loss = 0
-                    ope_sim_optimal = 0
+                label = tf.constant(label, dtype=tf.float32)
+                T_data, R_data = label, raw_R_data
+                n_full_states = n_states
 
                 # ======================= Tracking gradient ========================
                 with tf.GradientTape() as tape:
@@ -144,9 +123,6 @@ def main(args):
                     T_data, R_data = prediction, raw_R_data
                     n_full_states = n_states
                     
-                    # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
-                    loss = euclideanLoss(T_data, label) - optimal_loss
-
                     # Batch Whittle index computation
                     w = newWhittleIndex(T_data, R_data)
                     w = tf.reshape(w, (n_benefs, n_full_states))
@@ -154,8 +130,28 @@ def main(args):
                     if epoch == total_epoch:
                         w = tf.zeros((n_benefs, n_full_states))
 
-                    ope_sim = ope_simulator(w, K, epsilon=args.eps)
+                    # -------- Adversarial perturbation --------
+                    if mode == 'test' or args.robust == 'add_noise':
+                        if args.adversarial == 1 and noise_scale > 0:
+                            # label = addAdversarialNoise(label, gamma, noise_scale)
+                            label = addAdversarialNoiseNew(ope_simulator, tf.stop_gradient(w), K, label, noise_scale)
+                        else:
+                            label = addRandomNoise(label, noise_scale)
+                        
+                        ope_simulator = opeSimulator(None, n_benefs, L, n_states, OPE_SIM_N_TRIALS, gamma, beh_policy_name='random', T_data=label.numpy(), R_data=R_data.numpy(), env=env, H=H, baseline_mode=args.baseline_mode)
 
+                    # --------- compute optimal performance ----
+                    w_optimal = newWhittleIndex(label, R_data)
+                    w_optimal = tf.reshape(w_optimal, (n_benefs, n_full_states))
+                    optimal_loss = 0 # euclideanLoss(label, label)
+                    # optimal_loss = twoStageNLLLoss(traj, label, beh_policy_name)
+                    # TODO: how to specify "do nothing"?
+                    ope_sim_optimal = ope_simulator(w_optimal, K, epsilon=args.eps)
+
+                    # ----------- Performance metric -----------
+                    # loss = twoStageNLLLoss(traj, T_data, beh_policy_name) - optimal_loss
+                    loss = euclideanLoss(T_data, label) - optimal_loss
+                    ope_sim = ope_simulator(w, K, epsilon=args.eps)
                     performance = -ope_sim * (1 - TS_WEIGHT) + loss * TS_WEIGHT
 
                 # backpropagation
