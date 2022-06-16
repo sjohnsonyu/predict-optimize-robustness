@@ -45,9 +45,9 @@ def simulateTrajectories(args, env, k, w, gamma, start_state=None, policies=[0],
                 assert start_state.shape == (N,)
                 states = np.copy(start_state)
             
-            ## Iterate over timesteps. Note that if simulation length is L, 
-            ## there are L-1 action decisions to take.
-            for timestep in range(L-1):
+            ## Iterate over timesteps. Note that if simulation length is L+1, 
+            ## there are L action decisions to take.
+            for timestep in range(L):
                 ## Note Current State
                 state_record[tr, pol_idx, timestep, :] = np.copy(states)
                 traj[tr, pol_idx, timestep, dim_dict['state'], :] = np.copy(states)
@@ -116,9 +116,9 @@ def fastSimulateTrajectories(args, env, k, w, gamma, start_state=None, policies=
             assert start_state.shape == (ntr, N,)
             states = np.copy(start_state)
         
-        ## Iterate over timesteps. Note that if simulation length is L, 
-        ## there are L-1 action decisions to take.
-        for timestep in range(L-1):
+        ## Iterate over timesteps. Note that if simulation length is L+1, 
+        ## there are L action decisions to take.
+        for timestep in range(L):
 
             ## Note Current State
             state_record[:, pol_idx, timestep, :] = np.copy(states)
