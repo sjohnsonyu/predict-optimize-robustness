@@ -79,7 +79,7 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         traj, simulated_rewards, state_record, action_record, reward_record = getSimulatedTrajectories(
                                                                 n_benefs=n_benefs, T=L, K=K, n_trials=n_trials, gamma=gamma,
                                                                 T_data=T_data, R_data=R_data,
-                                                                w=w, replace=False, policies=[0,1,2]
+                                                                w=w, replace=False, policies=[0,1]
                                                                 )
         # print('slow version', time.time() - start_time)
 
@@ -104,7 +104,7 @@ def generateDataset(n_benefs, n_states, n_instances, n_trials, L, K, gamma, env=
         # print('empirical T data:', ope_simulator.emp_T_data[0])
 
         instance = (feature, raw_T_data, raw_R_data, traj, ope_simulator, simulated_rewards, state_record, action_record, reward_record)
-        print('average simulated rewards (random, rr, whittle, soft-whittle):', np.mean(simulated_rewards, axis=0))
+        print('average simulated rewards (random, rr):', np.mean(simulated_rewards, axis=0))
         dataset.append(instance)
 
     return dataset

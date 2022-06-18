@@ -27,6 +27,8 @@ class baseEnv:
             s[:, -1] = 1  # float arithmetic can result in last col != 1. ensure it's 1!
             r = np.random.rand(prob_matrix.shape[0])
             k = (s < np.expand_dims(r, 1)).sum(axis=1)
+            assert(min(prob_matrix[np.arange(len(k)), k]) != 0) # Ensure that the probability of sampling the next states is non-zero
+
             return k
 
         next_states = vec_multinomial(self.T_data[np.arange(self.N), states, np.array(actions).astype(int), :])
