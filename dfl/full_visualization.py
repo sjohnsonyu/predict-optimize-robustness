@@ -20,7 +20,8 @@ parser.add_argument('--name', default='.', type=str, help='Special string name.'
 parser.add_argument('--noise_scale', default=0, type=float, help='sigma of normally random noise added to test set')
 parser.add_argument('--robust', default=None, type=str, help='method of robust training')
 parser.add_argument('--adversarial', default=0, type=int, help='0 if using random perturb, 1 if adversarial')
-
+parser.add_argument('--eps', default=0.1, type=float, help='epsilon used for calculating soft top k')
+parser.add_argument('--run_one', default=None, type=str, help='df or ts if you want to run just one, else None to run both')
 
 args=parser.parse_args()
 
@@ -28,29 +29,31 @@ args.save=bool(args.save)
 args.plot=bool(args.plot)
 args.compute=bool(args.compute)
 
+assert args.run_one in [None, 'ts', 'df']
+assert not (args.compute and args.run_one and args.plot)
+
 if not args.name == '.':
   save_name = args.name
   print ("Using special save string: ", save_name)
 
+curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl'
 if args.compute:
   ### Launch new computational experiments for the specified settings if True 
   for sd in range(args.seed, args.seed+args.tr):
  
-    # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
-    curr_dir = os.path.abspath(os.getcwd())
+    curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl'
     df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
+    print('save_name is', save_name)
     ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
-    # df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
-    # ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
 
     robust_clause = '' if not args.robust == 'add_noise' else '--robust add_noise'
     print ('Starting seed: ', sd)
-    # print ('Starting DF Importance Sampling to be saved as: '+DF_IS_filename)
-    # subprocess.run(f'python3 train.py --method DF --sv {DF_IS_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"IS"} --noise_scale {args.noise_scale} {robust_clause}', shell=True)
-    print ('Starting DF Simu based to be saved as:', df_sim_filename)
-    subprocess.run(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
-    print ('Starting TS to be saved as:', ts_filename)
-    subprocess.run(f'python3 {curr_dir}/train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial}', shell=True)
+    if args.run_one is None or args.run_one == 'df':
+        print ('Starting DF Simu based to be saved as:', df_sim_filename)
+        subprocess.run(f'python3 {curr_dir}/train.py --method DF --sv {df_sim_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --ope {"sim"} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial} --eps {args.eps}', shell=True)
+    if args.run_one is None or args.run_one == 'ts':
+       print ('Starting TS to be saved as:', ts_filename)
+       subprocess.run(f'python3 {curr_dir}/train.py --method TS --sv {ts_filename} --epochs {args.epochs} --instances {args.instances} --seed {sd} --noise_scale {args.noise_scale} {robust_clause} --adversarial {args.adversarial} --eps {args.eps}', shell=True)
     print ('BOTH DONE')
 
 
@@ -58,19 +61,15 @@ if args.plot:
   ### Plot figures for the specified settings if True 
   modes = ['train', 'val', 'test']
   for mode in modes:
-    # df_is_outputs = []
     df_sim_outputs = []
     ts_outputs = []
     ts_allowed_seeds = []
     df_allowed_seeds = []
     for sd in range(args.seed, args.seed + args.tr):
 
-      # DF_IS_filename='./results/DF_IS_'+special+'_sd_'+str(sd)+'.pickle'
-      df_sim_filename = f'./results/DF_SIM_{save_name}_sd_{sd}.pickle'
-      ts_filename = f'./results/TS_{save_name}_sd_{sd}.pickle'
+      df_sim_filename = f'{curr_dir}/results/DF_SIM_{save_name}_sd_{sd}.pickle'
+      ts_filename = f'{curr_dir}/results/TS_{save_name}_sd_{sd}.pickle'
       
-      # with open (DF_IS_filename, 'rb') as df_is_file:
-      #     df_is_outputs.append(pickle.load(df_is_file))
       try:
         with open (df_sim_filename, 'rb') as df_sim_file:
             df_sim_outputs.append(pickle.load(df_sim_file))
@@ -87,7 +86,7 @@ if args.plot:
 
     num_epochs = len(df_sim_outputs[0][0][mode])# - 1 ## Last entry is the OPE if GT is perfectly known
 
-    random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in ts_allowed_seeds]
+    random_metrics = [[ts_outputs[j][i][mode][0] for i in range(3)] for j in range(len(ts_allowed_seeds))]
     # random_metrics = [[ts_outputs[sd-args.seed][i][mode][0] for i in range(3)] for sd in range(args.seed, args.seed+args.tr)]
     random_mean, random_ste = np.mean(random_metrics, axis=0), np.std(random_metrics, axis=0) / np.sqrt(len(ts_outputs))
     
@@ -132,7 +131,7 @@ if args.plot:
     plt.ylabel('Intermediate Loss', fontsize=18)
     plt.title(mode+' Loss comparison', fontsize=18)
     if args.save:
-        plt.savefig('./figs/'+save_name+'_'+mode+'_loss.png')
+        plt.savefig(f'{curr_dir}/figs/'+save_name+'_'+mode+'_loss.png')
     # plt.show()
 
     print('successful ts trials:', len(ts_outputs))
@@ -183,7 +182,7 @@ if args.plot:
     plt.ylabel('OPE-Sim', fontsize=18)
     plt.title(mode+' Sim-OPE comparison', fontsize=18)
     if args.save:
-        plt.savefig('./figs/'+save_name+'_'+mode+'_OPE_SIM.png')
+        plt.savefig(f'{curr_dir}/figs/'+save_name+'_'+mode+'_OPE_SIM.png')
     # plt.show()
   
 
@@ -250,7 +249,7 @@ if args.plot:
   plt.ylabel("Loss")
   # plt.show()
   if args.save:
-    plt.savefig(f'./figs/{save_name}_losses_bar.png')
+    plt.savefig(f'{curr_dir}/figs/{save_name}_losses_bar.png')
 
   ts_regret_mean, ts_regret_ste = np.mean(ts_regrets, axis=0), np.std(ts_regrets, axis=0) / np.sqrt(len(ts_outputs))
   # optimal_regret_mean, optimal_regret_ste = np.mean(optimal_regret, axis=0), np.std(optimal_regret, axis=0) / np.sqrt(len(ts_outputs))
@@ -265,7 +264,7 @@ if args.plot:
   plt.title("Regret (Sim-OPE)")
   plt.ylabel("Regret")
   if args.save:
-    plt.savefig(f'./figs/{save_name}_regrets_bar.png')
+    plt.savefig(f'{curr_dir}/figs/{save_name}_regrets_bar.png')
 
   plt.figure()
   rewards = [random_mean[1], ts_test_mean[1], df_sim_test_mean[1], optimal_test_mean[1]]
@@ -276,7 +275,7 @@ if args.plot:
   plt.ylabel("Reward")
 
   if args.save:
-    plt.savefig(f'./figs/{save_name}_rewards_bar.png')
+    plt.savefig(f'{curr_dir}/figs/{save_name}_rewards_bar.png')
   # plt.show()
 
   

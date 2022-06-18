@@ -7,9 +7,9 @@ import sys
 import os
 import pickle
 import random
-
+sys.path.insert(0, os.path.split(sys.path[0])[0])
 sys.path.insert(0, "../")
-
+print('current working dir:', os.getcwd())
 from dfl.model import ANN
 from dfl.synthetic import generateDataset
 from dfl.whittle import whittleIndex, newWhittleIndex
@@ -177,19 +177,25 @@ def main(args):
             overall_ope_sim[mode].append(np.mean(ope_sim_list))
             overall_ope_sim_optimal[mode].append(np.mean(ope_sim_optimal_list))
 
-    folder_path = 'pretrained/{}'.format(args.data)
+        folder_path = args.sv + '/pretrained/{}'.format(args.data)
+        folder_path = f'~/predict-optimize-robustness/dfl/test_results/{args.data}'
+        folder_path = os.getcwd() + '/' + args.data
+        folder_path = './' + args.data
+        if not os.path.exists(folder_path):
+            os.mkdir(folder_path)
 
-    if not os.path.exists(folder_path):
-        os.mkdir(folder_path)
-
-    model_path = '{}/{}.pickle'.format(folder_path, args.method)
-    with open(model_path, 'wb') as f:
-        pickle.dump((train_dataset, val_dataset, test_dataset, model_list), f)
-
-    if not(args.sv == '.'):
-        ### Output to be saved, else do nothing. 
-        with open(args.sv, 'wb') as filename:
-            pickle.dump([overall_loss, overall_ope_sim, overall_ope_sim_optimal], filename)
+        #model_path = f'{}/{}.pickle'.format(folder_path, args.method)
+        #with open(model_path, 'wb') as f:
+        #    pickle.dump((train_dataset, val_dataset, test_dataset, model_list), f)
+        #    print('writing model to', model_path)
+        if not(args.sv == '.'):
+            ### Output to be saved, else do nothing. 
+            with open(args.sv, 'wb') as filename:
+                pickle.dump([overall_loss, overall_ope_sim, overall_ope_sim_optimal], filename)
+            model_path = f'{folder_path}/{args.method}.pickle'
+            with open(model_path, 'wb') as f:
+                pickle.dump((train_dataset, val_dataset, test_dataset, model_list), f)
+                #print('writing model to', model_path)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ARMMAN decision-focused learning')
