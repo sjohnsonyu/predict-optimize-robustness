@@ -12,7 +12,7 @@ import numpy as np
 def init_if_not_saved(
     problem_cls,
     kwargs,
-    folder='models',
+    folder='/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code/models',
     load_new=True,
 ):
     # Find the filename if a saved version of the problem with the same kwargs exists
@@ -93,7 +93,6 @@ def print_metrics(
     loss_type,
     loss_fn,
     prefix="",
-    noise_scale=0
 ):
     # print(f"Current model parameters: {[param for param in model.parameters()]}")
     metrics = {}
@@ -104,7 +103,6 @@ def print_metrics(
         # Decision Quality
         pred = model(Xs).squeeze()
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
-        Ys = add_noise(Ys, scale=noise_scale)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
