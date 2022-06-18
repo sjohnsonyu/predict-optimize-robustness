@@ -75,7 +75,26 @@ def find_saved_problem(
     # noisy_T_data = np.where(noisy_T_data > 1, 1, noisy_T_data)
     # return tf.constant(noisy_T_data, dtype=tf.float32)
 
-def add_noise(y, scale=0):
+def add_noise(y, scale=0, noise_type='random'):
+    if noise_type == 'random':
+        return add_random_noise(y, scale)
+    elif noise_type == 'adversarial':
+        return add_adversarial_noise(y, scale)
+    else:
+        raise Exception("noise type is not valid. please select either random or adversarial")
+
+def add_random_noise(y, scale):
+    if isinstance(y, torch.Tensor) and len(y.shape) == 3:
+        batch_sz, num_channels, num_users = y.shape
+        noise = np.random.randn(batch_sz, num_channels, num_users) * scale
+        noisy_y = y + noise
+        noisy_y[noisy_y > 1] = 1
+        noisy_y[noisy_y < 0] = 0
+        return noisy_y
+    else:
+        return y
+
+def add_adversarial_noise(y, scale):
     if isinstance(y, torch.Tensor) and len(y.shape) == 3:
         batch_sz, num_channels, num_users = y.shape
         noise = np.random.randn(batch_sz, num_channels, num_users) * scale
@@ -93,7 +112,8 @@ def print_metrics(
     loss_type,
     loss_fn,
     prefix="",
-    noise_scale=0
+    noise_scale=0,
+    seed=0
 ):
     # print(f"Current model parameters: {[param for param in model.parameters()]}")
     metrics = {}
@@ -103,7 +123,13 @@ def print_metrics(
 
         # Decision Quality
         pred = model(Xs).squeeze()
+        if prefix == "Final":
+            # print('pred:', pred)
+            torch.save(pred, f'pred_{loss_type}_seed_{seed}.t')
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
+        if prefix == "Final":
+            # print('Zs_pred:', Zs_pred)
+            torch.save(Zs_pred, f'Zs_pred_{loss_type}_seed_{seed}.t')
         Ys = add_noise(Ys, scale=noise_scale)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 

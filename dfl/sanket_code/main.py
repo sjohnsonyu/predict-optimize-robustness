@@ -3,6 +3,7 @@ from functools import partial
 import os
 import sys
 import pickle
+import numpy as np
 
 # Makes sure hashes are consistent
 hashseed = os.getenv('PYTHONHASHSEED')
@@ -82,6 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--quadrank', type=int, default=20)
     parser.add_argument('--quadalpha', type=float, default=0)
     parser.add_argument('--noise_scale', type=float, default=0)
+    parser.add_argument('--noise_type', type=str, choices=['random', 'adversarial'], default='random')
     args = parser.parse_args()
 
     # Load problem
@@ -165,6 +167,8 @@ if __name__ == '__main__':
         intermediate_size=500,
         output_activation=problem.get_output_activation(),
     )
+    # model.load_state_dict(torch.load(f'best_model_{args.loss}'))
+    # model.eval()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Train neural network with a given loss function
@@ -187,7 +191,7 @@ if __name__ == '__main__':
         if iter_idx % args.valfreq == 0:
             # Compute metrics
             datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val')]
-            metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", noise_scale=args.noise_scale)
+            metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", noise_scale=args.noise_scale, seed=args.seed)
 
             # Save model if it's the best one
             if best[1] is None or metrics['val']['loss'] < best[0]:
@@ -213,12 +217,18 @@ if __name__ == '__main__':
     if args.earlystopping:
         model = best[1]
 
+    # torch.save(best[1].state_dict(), f'best_model_{args.loss}_seed_{args.seed}')
     # Document how well this trained model does
     print("\nBenchmarking Model...")
     # Print final metrics
-    Y_test = add_noise(Y_test, scale=args.noise_scale)
+    # print('no noise added:', Y_test)
+    torch.save(Y_test, f'Y_test_no_noise_{args.loss}_seed_{args.seed}.t')
+    breakpoint()
+    Y_test_no_noise = Y_test
+    Y_test = add_noise(Y_test, scale=args.noise_scale, )
+    torch.save(Y_test, f'Y_test_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}.t')
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", noise_scale=0)
+    test_metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", noise_scale=0, seed=args.seed)
 
     #   Document the value of a random guess
     objs_rand = []
@@ -230,9 +240,14 @@ if __name__ == '__main__':
 
     #   Document the optimal value
     Z_test_opt = problem.get_decision(Y_test, aux_data=Y_test_aux, isTrain=False)
+    # print('opt Z test:', Z_test_opt)
+    torch.save(Z_test_opt, f'Z_test_opt_{args.loss}_seed_{args.seed}.t')
     objectives = problem.get_objective(Y_test, Z_test_opt, aux_data=Y_test_aux)
     print(f"Optimal Decision Quality: {objectives.mean().item()}")
     print()
+    Z_test_opt = problem.get_decision(Y_test_no_noise, aux_data=Y_test_aux, isTrain=False)
+    # print('opt Z test no noise:', Z_test_opt)
+    torch.save(Z_test_opt, f'Z_test_opt_no_noise_{args.loss}_seed_{args.seed}.t')
 
     to_save = {'test':  test_metrics['test']['objective'],
                'random': torch.stack(objs_rand).mean().item(),
