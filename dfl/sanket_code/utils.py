@@ -12,7 +12,7 @@ import numpy as np
 def init_if_not_saved(
     problem_cls,
     kwargs,
-    folder='models',
+    folder='/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code/models',
     load_new=True,
 ):
     # Find the filename if a saved version of the problem with the same kwargs exists
@@ -112,8 +112,6 @@ def print_metrics(
     loss_type,
     loss_fn,
     prefix="",
-    noise_scale=0,
-    seed=0
 ):
     # print(f"Current model parameters: {[param for param in model.parameters()]}")
     metrics = {}
