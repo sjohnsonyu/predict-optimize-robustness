@@ -48,12 +48,13 @@ def getRandomProbabilityDistribution(m):
     assert np.sum(diffs) == 1 and len(diffs) == m
     return diffs
 
-def projection(partial_perturbed_label, partial_label, budget, norm=1):
+def projection(partial_perturbed_label, partial_label, budget, norm=1):  # TODO: are we enforcing the budget anywhere?
     partial_perturbed_label = tf.clip_by_value(partial_perturbed_label, 0, 1)
     perturbation = partial_perturbed_label - partial_label
     norm = tf.norm(perturbation, ord=norm)
-    perturbation = perturbation / norm
+    perturbation = perturbation / norm * budget
     return partial_label + perturbation
+
 
 def addAdversarialNoiseNew(ope_simulator, w, K, label, budget, norm=1, learning_rate=1e-2, num_iterations=10):
     partial_perturbed_label = tf.Variable(label[:,:,:,0])
@@ -68,12 +69,12 @@ def addAdversarialNoiseNew(ope_simulator, w, K, label, budget, norm=1, learning_
 
         grad = tape.gradient(perturbed_reward, partial_perturbed_label)
         optimizer.apply_gradients(zip([grad], [partial_perturbed_label]))
-
-        partial_perturbed_label = projection(tf.stop_gradient(partial_perturbed_label), label[:,:,:,0], budget)
+        partial_perturbed_label = projection(tf.stop_gradient(partial_perturbed_label), label[:,:,:,0], budget, norm)
         del tape
 
     perturbed_label = tf.stack([partial_perturbed_label, 1 - partial_perturbed_label], axis=-1)
     return tf.stop_gradient(perturbed_label)
+
 
 def addAdversarialNoise(T_data, gamma, scale=0.1):
     # senses = np.random.choice(['min','max'],2,replace=True)
@@ -109,7 +110,7 @@ def addAdversarialNoise(T_data, gamma, scale=0.1):
         except:
             import pdb; pdb.set_trace()
             print('something is wrong')
-        
+
         # expand adversarial_Ts into 8 instead of 4
         adversarial_T_data.append(adversarial_Ts)
     # return np.array(adversarial_T_data)
