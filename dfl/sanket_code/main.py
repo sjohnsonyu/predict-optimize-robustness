@@ -21,8 +21,8 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 from BudgetAllocation import BudgetAllocation
-from BipartiteMatching import BipartiteMatching
-from PortfolioOpt import PortfolioOpt
+#from BipartiteMatching import BipartiteMatching
+#from PortfolioOpt import PortfolioOpt
 from RMAB import RMAB
 from CubicTopK import CubicTopK
 from models import model_dict
@@ -82,10 +82,11 @@ if __name__ == '__main__':
     parser.add_argument('--quadrank', type=int, default=20)
     parser.add_argument('--quadalpha', type=float, default=0)
     parser.add_argument('--noise_scale', type=float, default=0)
+    parser.add_argument('--add_train_noise', type=int, default=0)
     args = parser.parse_args()
 
     # Load problem
-    print(f"Hyperparameters: {args}\n")
+    print(f"Hyperparameters: {args}")
     print(f"Loading {args.problem} Problem...")
     init_problem = partial(init_if_not_saved, load_new=args.loadnew)
     if args.problem == 'budgetalloc':
@@ -112,7 +113,7 @@ if __name__ == '__main__':
                             'num_nodes': args.nodes,
                             'val_frac': args.valfrac,
                             'rand_seed': args.seed,}
-        problem = init_problem(BipartiteMatching, problem_kwargs)
+ #       problem = init_problem(BipartiteMatching, problem_kwargs)
     elif args.problem == 'rmab':
         problem_kwargs =    {'num_train_instances': args.instances,
                             'num_test_instances': args.testinstances,
@@ -135,7 +136,7 @@ if __name__ == '__main__':
                             'alpha': args.stockalpha,
                             'val_frac': args.valfrac,
                             'rand_seed': args.seed,}
-        problem = init_problem(PortfolioOpt, problem_kwargs)
+  #      problem = init_problem(PortfolioOpt, problem_kwargs)
 
 
     # Load a loss function to train the ML model on
@@ -183,11 +184,13 @@ if __name__ == '__main__':
     best = (float("inf"), None)
     time_since_best = 0
     for iter_idx in range(args.iters):
+        Y_train_epoch = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
+        Y_val_epoch = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
         # Check metrics on val set
         if iter_idx % args.valfreq == 0:
             # Compute metrics
-            datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val')]
-            metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", noise_scale=args.noise_scale)
+            datasets = [(X_train, Y_train_epoch, Y_train_aux, 'train'), (X_val, Y_val_epoch, Y_val_aux, 'val')]
+            metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},")
 
             # Save model if it's the best one
             if best[1] is None or metrics['val']['loss'] < best[0]:
@@ -202,7 +205,7 @@ if __name__ == '__main__':
         losses = []
         for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
             pred = model(X_train[i]).squeeze()
-            losses.append(loss_fn(pred, Y_train[i], aux_data=Y_train_aux[i], partition='train', index=i))
+            losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
         loss = torch.stack(losses).mean()
 
         optimizer.zero_grad()
@@ -217,8 +220,10 @@ if __name__ == '__main__':
     print("\nBenchmarking Model...")
     # Print final metrics
     Y_test = add_noise(Y_test, scale=args.noise_scale)
+    Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
+    Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", noise_scale=0)
+    test_metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final")
 
     #   Document the value of a random guess
     objs_rand = []
@@ -238,7 +243,8 @@ if __name__ == '__main__':
                'random': torch.stack(objs_rand).mean().item(),
                'optimal': objectives.mean().item(),
                }
-    with open(f'exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}', 'wb') as f:
+    curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
+    with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}', 'wb') as f:
         pickle.dump(to_save, f)
     # pdb.set_trace()
 
