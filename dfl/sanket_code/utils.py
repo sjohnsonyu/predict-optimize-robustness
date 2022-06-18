@@ -123,14 +123,7 @@ def print_metrics(
 
         # Decision Quality
         pred = model(Xs).squeeze()
-        if prefix == "Final":
-            # print('pred:', pred)
-            torch.save(pred, f'pred_{loss_type}_seed_{seed}.t')
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
-        if prefix == "Final":
-            # print('Zs_pred:', Zs_pred)
-            torch.save(Zs_pred, f'Zs_pred_{loss_type}_seed_{seed}.t')
-        Ys = add_noise(Ys, scale=noise_scale)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
