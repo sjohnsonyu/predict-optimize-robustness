@@ -188,8 +188,11 @@ if __name__ == '__main__':
     best = (float("inf"), None)
     time_since_best = 0
     for iter_idx in range(args.iters):
-        Y_train_epoch = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
-        Y_val_epoch = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
+        # TODO: do we need to .detach() anywhere to stop the gradient?
+        Y_train_epoch = Y_train
+        Y_val_epoch = Y_val
+        # Y_train_epoch = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
+        # Y_val_epoch = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
         # Check metrics on val set
         if iter_idx % args.valfreq == 0:
             # Compute metrics
@@ -253,7 +256,8 @@ if __name__ == '__main__':
                'random': torch.stack(objs_rand).mean().item(),
                'optimal': objectives.mean().item(),
                }
-    curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
+    # curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
+    curr_dir = './'
     with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}', 'wb') as f:
         pickle.dump(to_save, f)
     # pdb.set_trace()

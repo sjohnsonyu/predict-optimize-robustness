@@ -1,5 +1,6 @@
 import os
 import pdb
+from pickletools import optimize
 from typing import Dict
 import pandas as pd
 import pickle
@@ -12,7 +13,8 @@ import numpy as np
 def init_if_not_saved(
     problem_cls,
     kwargs,
-    folder='/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code/models',
+    folder='./',
+    # folder='/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code/models',
     load_new=True,
 ):
     # Find the filename if a saved version of the problem with the same kwargs exists
@@ -79,7 +81,7 @@ def add_noise(y, scale=0, noise_type='random'):
     if noise_type == 'random':
         return add_random_noise(y, scale)
     elif noise_type == 'adversarial':
-        return add_adversarial_noise(y, scale)
+        return add_adversarial_noise(y=y.detach(), budget=scale)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
 
@@ -94,16 +96,30 @@ def add_random_noise(y, scale):
     else:
         return y
 
-def add_adversarial_noise(y, scale):
-    if isinstance(y, torch.Tensor) and len(y.shape) == 3:
-        batch_sz, num_channels, num_users = y.shape
-        noise = np.random.randn(batch_sz, num_channels, num_users) * scale
-        noisy_y = y + noise
-        noisy_y[noisy_y > 1] = 1
-        noisy_y[noisy_y < 0] = 0
-        return noisy_y
-    else:
-        return y
+def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters=10):
+    if not isinstance(y, torch.Tensor) or len(y.shape) != 3: return y
+    perturbed_y = y
+    perturbed_y.requires_grad = True
+    optim = torch.optim.Adam([perturbed_y], lr=lr)
+    for _ in range(num_iters):
+        perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+        perturbed_reward = perturbed_rewards.sum()
+        optim.zero_grad()
+        perturbed_reward.backward(retain_graph=True)
+        optim.step()
+        with torch.no_grad():
+            perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm)
+    return perturbed_y
+
+
+def projection(perturbed_y, y, budget=1, norm=1):
+    torch.clip(perturbed_y, 0, 1)
+    perturbation = perturbed_y - y
+    perturbation_norm = torch.norm(perturbed_y, p=norm)
+    budget = min(perturbation_norm, budget)  # don't inflate the perturbation if budget too high
+    perturbation = perturbation / perturbation_norm * budget
+    return y + perturbation
+
 
 def print_metrics(
     datasets,
@@ -122,6 +138,7 @@ def print_metrics(
         # Decision Quality
         pred = model(Xs).squeeze()
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
+        Ys = add_adversarial_noise(Ys, problem, Zs_pred)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
@@ -139,7 +156,7 @@ def print_metrics(
         objective = objectives.mean().item()
         loss = losses.mean().item()
         mae = torch.nn.L1Loss()(losses, -objectives).item()
-        print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
+        # print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
         metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae}
 
     return metrics
