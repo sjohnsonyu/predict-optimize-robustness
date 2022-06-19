@@ -68,22 +68,14 @@ def find_saved_problem(
     return filename, saved_probs
 
 
-    # n_benefs, n_states, n_actions, n_states = T_data.shape
-    # noise = np.random.randn(n_benefs, n_states, n_actions) * scale
-    # noisy_T_data = T_data.numpy()
-    # noisy_T_data[:, :, :, 0] = noisy_T_data[:, :, :, 0] + noise
-    # noisy_T_data[:, :, :, 1] = noisy_T_data[:, :, :, 1] - noise
-    # noisy_T_data = np.where(noisy_T_data < 0, 0, noisy_T_data)
-    # noisy_T_data = np.where(noisy_T_data > 1, 1, noisy_T_data)
-    # return tf.constant(noisy_T_data, dtype=tf.float32)
-
-def add_noise(y, scale=0, noise_type='random'):
+def add_noise(y, problem, Zs, scale=0, noise_type='random'):
     if noise_type == 'random':
         return add_random_noise(y, scale)
     elif noise_type == 'adversarial':
-        return add_adversarial_noise(y=y.detach(), budget=scale)
+        return add_adversarial_noise(y, problem, Zs, budget=scale)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
+
 
 def add_random_noise(y, scale):
     if isinstance(y, torch.Tensor) and len(y.shape) == 3:
@@ -95,6 +87,7 @@ def add_random_noise(y, scale):
         return noisy_y
     else:
         return y
+
 
 def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters=10):
     if not isinstance(y, torch.Tensor) or len(y.shape) != 3: return y
@@ -128,8 +121,10 @@ def print_metrics(
     loss_type,
     loss_fn,
     prefix="",
+    noise_type=None,
+    add_train_noise=False,
+    noise_scale=0
 ):
-    # print(f"Current model parameters: {[param for param in model.parameters()]}")
     metrics = {}
     for Xs, Ys, Ys_aux, partition in datasets:
         # Choose whether we should use train or test 
@@ -138,7 +133,9 @@ def print_metrics(
         # Decision Quality
         pred = model(Xs).squeeze()
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
-        Ys = add_adversarial_noise(Ys, problem, Zs_pred)
+
+        if partition == 'test' or add_train_noise:
+            Ys = add_noise(Ys, problem, Zs_pred, scale=noise_scale, noise_type=noise_type)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
@@ -156,10 +153,10 @@ def print_metrics(
         objective = objectives.mean().item()
         loss = losses.mean().item()
         mae = torch.nn.L1Loss()(losses, -objectives).item()
-        # print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
+        print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
         metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae}
 
-    return metrics
+    return metrics, Ys
 
 def starmap_with_kwargs(pool, fn, args_iter, kwargs):
     args_for_starmap = zip(repeat(fn), args_iter, repeat(kwargs))

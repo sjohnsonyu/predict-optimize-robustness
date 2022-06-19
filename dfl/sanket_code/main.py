@@ -197,7 +197,7 @@ if __name__ == '__main__':
         if iter_idx % args.valfreq == 0:
             # Compute metrics
             datasets = [(X_train, Y_train_epoch, Y_train_aux, 'train'), (X_val, Y_val_epoch, Y_val_aux, 'val')]
-            metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},")
+            metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale)
 
             # Save model if it's the best one
             if best[1] is None or metrics['val']['loss'] < best[0]:
@@ -223,34 +223,28 @@ if __name__ == '__main__':
     if args.earlystopping:
         model = best[1]
 
-    # torch.save(best[1].state_dict(), f'best_model_{args.loss}_seed_{args.seed}')
     # Document how well this trained model does
     print("\nBenchmarking Model...")
     # Print final metrics
-    Y_test = add_noise(Y_test, scale=args.noise_scale)
-    Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
-    Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
+    # Y_test = add_noise(Y_test, scale=args.noise_scale)
+    # Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
+    # Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final")
+    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale)
 
     #   Document the value of a random guess
     objs_rand = []
     for _ in range(10):
         Z_test_rand = problem.get_decision(torch.rand_like(Y_test), aux_data=Y_test_aux, isTrain=False)
-        objectives = problem.get_objective(Y_test, Z_test_rand, aux_data=Y_test_aux)
+        objectives = problem.get_objective(perturbed_Y_test, Z_test_rand, aux_data=Y_test_aux)
         objs_rand.append(objectives)
     print(f"\nRandom Decision Quality: {torch.stack(objs_rand).mean().item()}")
 
     #   Document the optimal value
-    Z_test_opt = problem.get_decision(Y_test, aux_data=Y_test_aux, isTrain=False)
-    # print('opt Z test:', Z_test_opt)
-    torch.save(Z_test_opt, f'Z_test_opt_{args.loss}_seed_{args.seed}.t')
-    objectives = problem.get_objective(Y_test, Z_test_opt, aux_data=Y_test_aux)
+    Z_test_opt = problem.get_decision(perturbed_Y_test, aux_data=Y_test_aux, isTrain=False)
+    objectives = problem.get_objective(perturbed_Y_test, Z_test_opt, aux_data=Y_test_aux)
     print(f"Optimal Decision Quality: {objectives.mean().item()}")
     print()
-    Z_test_opt = problem.get_decision(Y_test_no_noise, aux_data=Y_test_aux, isTrain=False)
-    # print('opt Z test no noise:', Z_test_opt)
-    torch.save(Z_test_opt, f'Z_test_opt_no_noise_{args.loss}_seed_{args.seed}.t')
 
     to_save = {'test':  test_metrics['test']['objective'],
                'random': torch.stack(objs_rand).mean().item(),
