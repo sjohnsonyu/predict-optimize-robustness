@@ -109,8 +109,8 @@ def projection(perturbed_y, y, budget=1, norm=1):
     torch.clip(perturbed_y, 0, 1)
     perturbation = perturbed_y - y
     perturbation_norm = torch.norm(perturbed_y, p=norm)
-    budget = min(perturbation_norm, budget)  # don't inflate the perturbation if budget too high
-    perturbation = perturbation / perturbation_norm * budget
+    if perturbation_norm > budget:
+        perturbation = perturbation / perturbation_norm
     return y + perturbation
 
 
