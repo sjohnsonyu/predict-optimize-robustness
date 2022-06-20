@@ -89,7 +89,7 @@ def add_random_noise(y, scale):
         return y
 
 
-def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters=10):
+def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters=20):
     if not isinstance(y, torch.Tensor) or len(y.shape) != 3: return y
     perturbed_y = y
     perturbed_y.requires_grad = True
@@ -110,7 +110,7 @@ def projection(perturbed_y, y, budget=1, norm=1):
     perturbation = perturbed_y - y
     perturbation_norm = torch.norm(perturbed_y, p=norm)
     if perturbation_norm > budget:
-        perturbation = perturbation / perturbation_norm
+        perturbation = perturbation / perturbation_norm * budget
     return y + perturbation
 
 

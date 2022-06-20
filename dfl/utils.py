@@ -53,21 +53,19 @@ def projection(partial_perturbed_label, partial_label, budget, norm=1):
     perturbation = partial_perturbed_label - partial_label
     perturbation_norm = tf.norm(perturbation, ord=norm)
     if perturbation_norm > budget:
-        perturbation = perturbation / perturbation_norm
+        perturbation = perturbation / perturbation_norm * budget
     return partial_label + perturbation
 
 
-def addAdversarialNoiseNew(ope_simulator, w, K, label, budget, norm=1, learning_rate=1e-2, num_iterations=10):
+def addAdversarialNoiseNew(ope_simulator, w, K, label, budget, norm=1, learning_rate=1e-3, num_iterations=20):
     partial_perturbed_label = tf.Variable(label[:,:,:,0])
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-    print('restart')
     for _ in range(num_iterations):
         partial_perturbed_label = tf.Variable(partial_perturbed_label)
         with tf.GradientTape() as tape:
             tape.watch(partial_perturbed_label)
             perturbed_label = tf.stack([partial_perturbed_label, 1 - partial_perturbed_label], axis=-1)
             perturbed_reward = ope_simulator.perturbation(w, K, perturbed_label)
-            print(float(perturbed_reward))
         grad = tape.gradient(perturbed_reward, partial_perturbed_label)
         optimizer.apply_gradients(zip([grad], [partial_perturbed_label]))
         partial_perturbed_label = projection(tf.stop_gradient(partial_perturbed_label), label[:,:,:,0], budget, norm)
