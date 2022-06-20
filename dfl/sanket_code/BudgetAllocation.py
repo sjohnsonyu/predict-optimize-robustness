@@ -69,7 +69,8 @@ class BudgetAllocation(PThenO):
         Loads the labels (Ys) of the prediction from a file, and returns a subset of it parameterised by instances.
         """
         # Load the dataset
-        curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
+        # curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
+        curr_dir = './'
         with open(f'{curr_dir}/data/budget_allocation_data.pickle', 'rb') as f:
             Yfull, _ = pickle.load(f, encoding='bytes')
         Yfull = np.array(Yfull)

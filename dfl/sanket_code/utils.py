@@ -70,9 +70,9 @@ def find_saved_problem(
 
 def add_noise(y, problem, Zs, scale=0, noise_type='random'):
     if noise_type == 'random':
-        return add_random_noise(y, scale)
+        return add_random_noise(torch.clone(y), scale)
     elif noise_type == 'adversarial':
-        return add_adversarial_noise(y, problem, Zs, budget=scale)
+        return add_adversarial_noise(torch.clone(y), problem, Zs, budget=scale)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
 
@@ -89,16 +89,16 @@ def add_random_noise(y, scale):
         return y
 
 
-def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters=20):
+def add_adversarial_noise(y, problem, Zs, budget=100, lr=2e-2, norm=1, num_iters=100):
     if not isinstance(y, torch.Tensor) or len(y.shape) != 3: return y
-    perturbed_y = y
+    perturbed_y = y.clone()
     perturbed_y.requires_grad = True
     optim = torch.optim.Adam([perturbed_y], lr=lr)
     for _ in range(num_iters):
         perturbed_rewards = problem.get_objective(perturbed_y, Zs)
         perturbed_reward = perturbed_rewards.sum()
         optim.zero_grad()
-        perturbed_reward.backward(retain_graph=True)
+        perturbed_reward.backward()
         optim.step()
         with torch.no_grad():
             perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm)
@@ -106,12 +106,19 @@ def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-3, norm=1, num_iters
 
 
 def projection(perturbed_y, y, budget=1, norm=1):
-    torch.clip(perturbed_y, 0, 1)
-    perturbation = perturbed_y - y
-    perturbation_norm = torch.norm(perturbed_y, p=norm)
-    if perturbation_norm > budget:
-        perturbation = perturbation / perturbation_norm * budget
-    return y + perturbation
+    too_low_mask = perturbed_y < 0
+    too_high_mask = perturbed_y > 1
+    perturbed_y[too_low_mask] = 0
+    perturbed_y[too_high_mask] = 1
+    batch_sz, num_channels, num_users = y.shape
+    perturbed_y = perturbed_y.reshape(batch_sz, num_channels * num_users)
+    y = y.reshape(batch_sz, num_channels * num_users)
+    perturbation = (perturbed_y - y).reshape(batch_sz, num_channels * num_users)
+    perturbation_norm = torch.norm(perturbation, p=norm, dim=1)
+    mask = perturbation_norm > budget
+    if sum(mask) > 0:
+        perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
+    return perturbed_y.reshape(batch_sz, num_channels, num_users)
 
 
 def print_metrics(
@@ -133,9 +140,8 @@ def print_metrics(
         # Decision Quality
         pred = model(Xs).squeeze()
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
-
         if partition == 'test' or add_train_noise:
-            Ys = add_noise(Ys, problem, Zs_pred, scale=noise_scale, noise_type=noise_type)
+            Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
