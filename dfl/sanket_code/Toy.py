@@ -73,7 +73,9 @@ class Toy(PThenO):
         Creates a random dataset and returns a subset of it parameterised by instances.
         """
          # TODO: what ranges do we want to allow?
-        Yfull = np.random.randint(-10, 11, size=(10000,1)) 
+        self.low = -10
+        self.high = 10
+        Yfull = np.random.randint(self.low, self.high + 1, size=(10000,1)) 
         # Whittle the dataset down to the right size
         def whittle(matrix, size, dim):
             assert size <= matrix.shape[dim]
@@ -108,23 +110,13 @@ class Toy(PThenO):
         For a given set of predictions/labels (Y), returns the decision quality.
         The objective needs to be _maximised_.
         """
-        # Sanity check inputs
-        # assert Y.shape[-2] == Z.shape[-1]
-        # assert len(Z.shape) + 1 == len(Y.shape)
-        # TODO: may need to be vectorized
-
         return self._reward_function(Z - Y).squeeze()
 
     def get_decision(self, Y, **kwargs):
-        # If this is a single instance of a decision problem
-        if len(Y.shape) == 2:
-            return self.get_optimal_z(Y)
-        # If it's not...
-        # Y_shape = Y.shape
-        #   Break it down into individual instances and solve
-        # Y_new = Y#.view((-1, Y_shape[-2], Y_shape[-1]))
-        Z = torch.Tensor([self.get_optimal_z(y) for y in Y]).unsqueeze(1)
-        #   Convert it back to the right shape
-        # Z = Z.view((*Y_shape[:-2], -1))
-        return Z
+        return self.get_optimal_z(Y) 
 
+    def get_low(self):
+        return self.low
+
+    def get_high(self):
+        return self.high
