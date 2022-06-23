@@ -24,6 +24,8 @@ def dense_nn(
             activation_fn = torch.nn.ReLU
         elif activation == 'sigmoid':
             activation_fn = torch.nn.Sigmoid
+        elif activation is None:
+            pass
         else:
             raise Exception('Invalid activation function: ' + str(activation))
         net_layers = [torch.nn.Linear(num_features, intermediate_size), activation_fn()]
@@ -49,6 +51,8 @@ def dense_nn(
         net_layers.append(torch.nn.Tanh())
     elif output_activation == 'softmax':
         net_layers.append(torch.nn.Softmax(dim=-1))
+    elif output_activation is None:
+        pass
 
     return torch.nn.Sequential(*net_layers)
 

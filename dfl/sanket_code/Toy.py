@@ -97,7 +97,7 @@ class Toy(PThenO):
         return 1, 1  # x, y dims
     
     def get_output_activation(self):
-        return 'relu'
+        return None
 
     def get_twostageloss(self):
         return 'mse'
