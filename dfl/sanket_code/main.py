@@ -73,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--stocks', type=int, default=50)
     parser.add_argument('--stockalpha', type=float, default=0.1)
     #   Decision-Focused Learning
-    parser.add_argument('--dflalpha', type=float, default=0.1)
+    parser.add_argument('--dflalpha', type=float, default=0.0)
     #   Learned-Loss
     parser.add_argument('--serial', type=ast.literal_eval, default=True)
     parser.add_argument('--sampling', type=str, choices=['random', 'random_flip', 'random_uniform', 'numerical_jacobian', 'random_jacobian', 'random_hessian', 'random'], default='random')
