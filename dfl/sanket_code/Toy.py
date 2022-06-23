@@ -53,7 +53,7 @@ class Toy(PThenO):
         # self.opt = SubmodularOptimizer(self.get_objective, self.budget)
         self.offset = self._get_opt_offset()
         # Undo random seed setting
-        self._set_seed()
+        # self._set_seed()
 
     def _get_opt_offset(self):
         opt_result = optimize.minimize(lambda x: -self._reward_function(x), 0)  # maximize
