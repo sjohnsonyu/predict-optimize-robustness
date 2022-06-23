@@ -7,6 +7,7 @@ import pickle
 import torch
 import inspect
 from itertools import repeat
+from scipy import optimize, rand
 import numpy as np
 from Toy import Toy
 
@@ -103,24 +104,73 @@ def add_random_noise(y, scale, low=0, high=1):
         return y
 
 
-def add_adversarial_noise(y, problem, Zs, budget=100, lr=1e-5, norm=1, num_iters=100, low=0, high=1):
+def add_adversarial_noise_optim(y, problem, Zs, budget):
+    opt_result = optimize.minimize(problem.get_reward_function(), -2)
+
+def add_adversarial_noise(y,
+                          problem,
+                          Zs,
+                          budget=100,
+                          lr=1e-2,
+                          norm=1,
+                          num_iters=30,
+                          low=0,
+                          high=1,
+                          num_random_inits=1000,
+                          random_init_scale=3,
+                          random_init_bias=2
+                         ):
     if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
-    perturbed_y = y.clone()
-    perturbed_y.requires_grad = True
-    optim = torch.optim.Adam([perturbed_y], lr=lr)
-    print('starting')
-    breakpoint()
-    for _ in range(num_iters):
-        perturbed_rewards = problem.get_objective(perturbed_y, Zs)
-        perturbed_reward = perturbed_rewards.sum()
-        print(float(perturbed_reward))
-        optim.zero_grad()
-        perturbed_reward.backward()
-        optim.step()
-        with torch.no_grad():
-            perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
+    # TODO: refactor this — break out into a separate function that gets called below
+    if num_random_inits is None:
+        perturbed_y = y.clone()  # y.clone + random noise (want Z - Y to be smaller than offset)
+        perturbed_y.requires_grad = True
+        optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
+        for _ in range(num_iters):
+            perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+            perturbed_reward = perturbed_rewards.sum()
+            optim.zero_grad()
+            perturbed_reward.backward()
+            optim.step()
+            with torch.no_grad():
+                perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
+        return perturbed_y
+
+    all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
+    all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
+    for i in range(num_random_inits):
+        perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
+        perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
+        perturbed_y.requires_grad = True
+        optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
+        # optim = torch.optim.Adam([perturbed_y], lr=lr)
+        for _ in range(num_iters):
+            perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+            perturbed_reward = perturbed_rewards.sum()
+            optim.zero_grad()
+            perturbed_reward.backward()
+            optim.step()
+            with torch.no_grad():
+                perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
+        all_perturbed_ys[:, i] = perturbed_y.squeeze()
+        all_perturbed_rewards[:, i] = perturbed_rewards
+        # print(float(perturbed_reward))
+
+    idxs = torch.argmin(all_perturbed_rewards, dim=1)
+    perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
+    perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+    perturbed_reward = perturbed_rewards.sum()
+    # print('final perturbed_reward', perturbed_reward)
+    # breakpoint()
     return perturbed_y
 
+
+def clip(tensor, low, high):
+    too_low_mask = tensor < low
+    too_high_mask = tensor > high
+    tensor[too_low_mask] = low
+    tensor[too_high_mask] = high
+    return tensor
 
 def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
     too_low_mask = perturbed_y < low
@@ -143,6 +193,7 @@ def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
         perturbation_norm = torch.norm(perturbation, p=norm, dim=1)
         mask = perturbation_norm > budget
         if sum(mask) > 0:
+            # print('touching budget')
             perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
         return perturbed_y
 

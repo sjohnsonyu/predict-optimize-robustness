@@ -120,3 +120,6 @@ class Toy(PThenO):
 
     def get_high(self):
         return self.high
+
+    def get_reward_function(self):
+        return self._reward_function
