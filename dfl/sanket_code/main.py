@@ -108,6 +108,7 @@ if __name__ == '__main__':
                             'rand_seed': args.seed,
                             'val_frac': args.valfrac,}
         problem = init_problem(Toy, problem_kwargs)
+
     elif args.problem == 'cubic':
         problem_kwargs =    {'num_train_instances': args.instances,
                             'num_test_instances': args.testinstances,
@@ -215,7 +216,9 @@ if __name__ == '__main__':
         # Learn
         losses = []
         for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
-            pred = model(X_train[i]).squeeze()
+            pred = model(X_train[i])
+            if not isinstance(problem, Toy):
+                pred = pred.squeeze()
             losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
         loss = torch.stack(losses).mean()
 

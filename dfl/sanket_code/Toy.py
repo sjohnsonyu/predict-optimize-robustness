@@ -37,7 +37,6 @@ class Toy(PThenO):
             # Save Xs and Ys
             Ys_train_test.append(Ys)
         self.Ys_train, self.Ys_test = (*Ys_train_test,)
-        self.num_features = self.Ys_train.shape[1]
 
         # dummy data: X = Y
         self.Xs_train, self.Xs_test = self.Ys_train, self.Ys_test
@@ -74,14 +73,13 @@ class Toy(PThenO):
         Creates a random dataset and returns a subset of it parameterised by instances.
         """
          # TODO: what ranges do we want to allow?
-        Yfull = np.random.randint(-10, 11, size=10000) 
+        Yfull = np.random.randint(-10, 11, size=(10000,1)) 
         # Whittle the dataset down to the right size
         def whittle(matrix, size, dim):
             assert size <= matrix.shape[dim]
             elements = np.random.choice(matrix.shape[dim], size)
             return np.take(matrix, elements, axis=dim)
         Ys = whittle(Yfull, num_instances, 0)
-
         return torch.from_numpy(Ys).float().detach()
 
     def get_train_data(self):
@@ -94,7 +92,7 @@ class Toy(PThenO):
         return self.Xs_test, self.Ys_test,  [None for _ in range(len(self.Ys_test))]
 
     def get_modelio_shape(self):
-        return self.num_features, 1  # x, y dims
+        return 1, 1  # x, y dims
     
     def get_output_activation(self):
         return 'relu'
@@ -103,8 +101,6 @@ class Toy(PThenO):
         return 'mse'
 
     def get_optimal_z(self, y):
-        # FIXME: hack to deal with the weird behavior where offset getting saved as an OptimizeResult
-        self.offset = self._get_opt_offset()
         return y + self.offset
 
     def get_objective(self, Y, Z, **kwargs):
@@ -116,19 +112,17 @@ class Toy(PThenO):
         # assert Y.shape[-2] == Z.shape[-1]
         # assert len(Z.shape) + 1 == len(Y.shape)
         # TODO: may need to be vectorized
-        s = Z - Y
 
-        return self._reward_function(Z - Y)
+        return self._reward_function(Z - Y).squeeze()
 
     def get_decision(self, Y, **kwargs):
         # If this is a single instance of a decision problem
-        if len(Y.shape) == 1:
+        if len(Y.shape) == 2:
             return self.get_optimal_z(Y)
         # If it's not...
         # Y_shape = Y.shape
         #   Break it down into individual instances and solve
         # Y_new = Y#.view((-1, Y_shape[-2], Y_shape[-1]))
-        # FIXME: for some reason self.offset is getting saved as a <class 'scipy.optimize.optimize.OptimizeResult'> ?
         Z = torch.Tensor([self.get_optimal_z(y) for y in Y]).unsqueeze(1)
         #   Convert it back to the right shape
         # Z = Z.view((*Y_shape[:-2], -1))

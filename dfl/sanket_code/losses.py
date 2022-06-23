@@ -423,7 +423,7 @@ def _get_decision_focused(
     def decision_focused_loss(Yhats, Ys, **kwargs):
         Zs = problem.get_decision(Yhats, isTrain=True, **kwargs)
         obj = problem.get_objective(Ys, Zs, isTrain=True, **kwargs)
-        loss = -obj + dflalpha * twostageloss(Yhats, Ys)
+        loss = -obj * (1 - dflalpha) + dflalpha * twostageloss(Yhats, Ys)
 
         return loss
 

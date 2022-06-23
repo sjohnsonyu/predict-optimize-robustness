@@ -137,10 +137,9 @@ def print_metrics(
         # Choose whether we should use train or test 
         isTrain = (partition=='train') and (prefix != "Final")
         # Decision Quality
-        breakpoint()
         pred = model(Xs).squeeze()
-        # if isinstance(problem, Toy):  # this is a hack; assuming problem has to do with model shape?
-        #     pred = pred.unsqueeze(1)
+        if isinstance(problem, Toy):  # this is a hack; toy is the only domain with preds of dim 1
+            pred = pred.unsqueeze(1)
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
         if partition == 'test' or add_train_noise:
             Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type)
