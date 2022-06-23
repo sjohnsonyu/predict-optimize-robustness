@@ -21,6 +21,7 @@ import pdb
 import matplotlib.pyplot as plt
 from copy import deepcopy
 
+from Toy import Toy
 from BudgetAllocation import BudgetAllocation
 #from BipartiteMatching import BipartiteMatching
 #from PortfolioOpt import PortfolioOpt
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     # Get hyperparams from the command line
     # TODO: Separate main into folders per domain
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio'], default='portfolio')
+    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio', 'toy'], default='portfolio')
     parser.add_argument('--loadnew', type=ast.literal_eval, default=False)
     parser.add_argument('--layers', type=int, default=2)
     parser.add_argument('--iters', type=int, default=5000)
@@ -72,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--stocks', type=int, default=50)
     parser.add_argument('--stockalpha', type=float, default=0.1)
     #   Decision-Focused Learning
-    parser.add_argument('--dflalpha', type=float, default=1.)
+    parser.add_argument('--dflalpha', type=float, default=0.1)
     #   Learned-Loss
     parser.add_argument('--serial', type=ast.literal_eval, default=True)
     parser.add_argument('--sampling', type=str, choices=['random', 'random_flip', 'random_uniform', 'numerical_jacobian', 'random_jacobian', 'random_hessian', 'random'], default='random')
@@ -101,6 +102,12 @@ if __name__ == '__main__':
                             'rand_seed': args.seed,
                             'val_frac': args.valfrac,}
         problem = init_problem(BudgetAllocation, problem_kwargs)
+    elif args.problem == 'toy':
+        problem_kwargs =    {'num_train_instances': args.instances,
+                            'num_test_instances': args.testinstances,
+                            'rand_seed': args.seed,
+                            'val_frac': args.valfrac,}
+        problem = init_problem(Toy, problem_kwargs)
     elif args.problem == 'cubic':
         problem_kwargs =    {'num_train_instances': args.instances,
                             'num_test_instances': args.testinstances,
@@ -188,11 +195,8 @@ if __name__ == '__main__':
     best = (float("inf"), None)
     time_since_best = 0
     for iter_idx in range(args.iters):
-        # TODO: do we need to .detach() anywhere to stop the gradient?
         Y_train_epoch = Y_train
         Y_val_epoch = Y_val
-        # Y_train_epoch = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
-        # Y_val_epoch = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
         # Check metrics on val set
         if iter_idx % args.valfreq == 0:
             # Compute metrics
@@ -254,13 +258,5 @@ if __name__ == '__main__':
     curr_dir = './'
     with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}', 'wb') as f:
         pickle.dump(to_save, f)
-    # pdb.set_trace()
 
-    # #   Plot predictions on test data
-    # plt.scatter(Y_test.sum(dim=-1).flatten().detach().tolist(), pred.sum(dim=-1).flatten().detach().tolist(), )
-    # plt.title(args.loss)
-    # plt.xlabel("True")
-    # plt.ylabel("Predicted")
-    # plt.xlim([0, 0.5])
-    # plt.ylim([0, 0.5])
-    # plt.show()
+

@@ -8,7 +8,7 @@ import torch
 import inspect
 from itertools import repeat
 import numpy as np
-
+from Toy import Toy
 
 def init_if_not_saved(
     problem_cls,
@@ -136,9 +136,11 @@ def print_metrics(
     for Xs, Ys, Ys_aux, partition in datasets:
         # Choose whether we should use train or test 
         isTrain = (partition=='train') and (prefix != "Final")
-
         # Decision Quality
+        breakpoint()
         pred = model(Xs).squeeze()
+        # if isinstance(problem, Toy):  # this is a hack; assuming problem has to do with model shape?
+        #     pred = pred.unsqueeze(1)
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
         if partition == 'test' or add_train_noise:
             Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type)
@@ -149,7 +151,9 @@ def print_metrics(
             losses = []
             for i in range(len(Xs)):
                 # Surrogate Loss
-                pred = model(Xs[i]).squeeze()
+                pred = model(Xs[i])
+                if not isinstance(problem, Toy):
+                    pred = pred.squeeze()
                 losses.append(loss_fn(pred, Ys[i], aux_data=Ys_aux[i], partition=partition, index=i))
             losses = torch.stack(losses).flatten()
         else:
