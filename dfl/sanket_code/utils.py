@@ -10,6 +10,7 @@ from itertools import repeat
 from scipy import optimize, rand
 import numpy as np
 from Toy import Toy
+import qpth
 
 def init_if_not_saved(
     problem_cls,
@@ -116,7 +117,7 @@ def add_adversarial_noise(y,
                           num_iters=30,
                           low=0,
                           high=1,
-                          num_random_inits=1000,
+                          num_random_inits=300,
                           random_init_scale=3,
                           random_init_bias=2
                          ):
@@ -160,8 +161,21 @@ def add_adversarial_noise(y,
     perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
     perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     perturbed_reward = perturbed_rewards.sum()
-    # print('final perturbed_reward', perturbed_reward)
-    # breakpoint()
+    
+    for i in range(len(perturbed_y)):
+        # Differentiable part! # TODO rethink the y.clone() or detach elsewhere
+        Q = torch.eye(len(perturbed_y[i])) # typically Hessian, but sub for arbitrary SPD matrix
+        A, b, G, h = torch.Tensor([]), torch.Tensor([]), torch.Tensor([[1]]), torch.Tensor([budget]) # constraint matrix
+        perturbed_y_var = perturbed_y[i].detach().requires_grad_(True)
+        perturbed_reward_var =  problem.get_objective(perturbed_y_var, Zs[i])
+        jac = torch.autograd.grad(perturbed_reward_var, perturbed_y_var, retain_graph=True, create_graph=True)[0] 
+        # TODO: should jac have a - sign?
+        p = jac - Q @ perturbed_y[i] #
+
+        qp_solver = qpth.qp.QPFunction(verbose=-1)
+        # breakpoint()
+        approx_y = qp_solver(Q, p, G, h, A, b)[0]
+        # print(perturbed_y_var - approx_y)  # checks out, they seem close!
     return perturbed_y
 
 
