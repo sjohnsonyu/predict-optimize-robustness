@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise_scale', type=float, default=0)
     parser.add_argument('--noise_type', type=str, choices=['random', 'adversarial'], default='random')
     parser.add_argument('--add_train_noise', type=int, default=0)
+    parser.add_argument('--adv_backprop', type=int, default=0)
     args = parser.parse_args()
 
     # Load problem
@@ -202,7 +203,7 @@ if __name__ == '__main__':
         if iter_idx % args.valfreq == 0:
             # Compute metrics
             datasets = [(X_train, Y_train_epoch, Y_train_aux, 'train'), (X_val, Y_val_epoch, Y_val_aux, 'val')]
-            metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale)
+            metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale, args.adv_backprop)
 
             # Save model if it's the best one
             if best[1] is None or metrics['val']['loss'] < best[0]:
@@ -237,7 +238,7 @@ if __name__ == '__main__':
     # Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
     # Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale)
+    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale, adv_backprop=False)
 
     #   Document the value of a random guess
     objs_rand = []

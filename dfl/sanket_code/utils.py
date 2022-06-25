@@ -70,7 +70,7 @@ def find_saved_problem(
     return filename, saved_probs
 
 
-def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1):
+def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1, adv_backprop=False):
     if isinstance(problem, Toy):
         low = problem.get_low()
         high = problem.get_high()
@@ -82,7 +82,7 @@ def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1):
         return add_random_noise(torch.clone(y), scale, low=low, high=high)
     elif noise_type == 'adversarial':
         # NOTE: I removed the y.clone() here, want to sanity check
-        return add_adversarial_noise(y, problem, Zs, budget=scale, low=low, high=high)
+        return add_adversarial_noise(y, problem, Zs, budget=scale, low=low, high=high, adv_backprop=adv_backprop)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
 
@@ -118,7 +118,7 @@ def add_adversarial_noise(y,
                           num_random_inits=300,
                           random_init_scale=3,
                           random_init_bias=2,
-                          adv_backprop=True,
+                          adv_backprop=False,
                          ):
     if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
     no_random_inits = num_random_inits is None
@@ -155,6 +155,7 @@ def add_adversarial_noise(y,
     if not adv_backprop:
         return perturbed_y
 
+    breakpoint()
     df_dzs = torch.zeros(Zs.shape[0], 1)
     final_perturbed_ys = torch.zeros(y.shape[0], 1)
     for i in range(len(perturbed_y)):
@@ -217,7 +218,8 @@ def print_metrics(
     prefix="",
     noise_type=None,
     add_train_noise=False,
-    noise_scale=0
+    noise_scale=0,
+    adv_backprop=False
 ):
     metrics = {}
     for Xs, Ys, Ys_aux, partition in datasets:
@@ -229,7 +231,7 @@ def print_metrics(
             pred = pred.unsqueeze(1)
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
         if partition == 'test' or add_train_noise:
-            Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type)
+            Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type, adv_backprop=adv_backprop)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
