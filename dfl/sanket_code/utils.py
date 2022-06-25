@@ -81,7 +81,8 @@ def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1):
     if noise_type == 'random':
         return add_random_noise(torch.clone(y), scale, low=low, high=high)
     elif noise_type == 'adversarial':
-        return add_adversarial_noise(torch.clone(y), problem, Zs, budget=scale, low=low, high=high)
+        # NOTE: I removed the y.clone() here, want to sanity check
+        return add_adversarial_noise(y, problem, Zs, budget=scale, low=low, high=high)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
 
@@ -105,9 +106,6 @@ def add_random_noise(y, scale, low=0, high=1):
         return y
 
 
-def add_adversarial_noise_optim(y, problem, Zs, budget):
-    opt_result = optimize.minimize(problem.get_reward_function(), -2)
-
 def add_adversarial_noise(y,
                           problem,
                           Zs,
@@ -119,28 +117,22 @@ def add_adversarial_noise(y,
                           high=1,
                           num_random_inits=300,
                           random_init_scale=3,
-                          random_init_bias=2
+                          random_init_bias=2,
+                          adv_backprop=True,
                          ):
     if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
-    # TODO: refactor this — break out into a separate function that gets called below
-    if num_random_inits is None:
-        perturbed_y = y.clone()  # y.clone + random noise (want Z - Y to be smaller than offset)
-        perturbed_y.requires_grad = True
-        optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
-        for _ in range(num_iters):
-            perturbed_rewards = problem.get_objective(perturbed_y, Zs)
-            perturbed_reward = perturbed_rewards.sum()
-            optim.zero_grad()
-            perturbed_reward.backward()
-            optim.step()
-            with torch.no_grad():
-                perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
-        return perturbed_y
-
+    no_random_inits = num_random_inits is None
+    num_random_inits = 1 if num_random_inits is None else num_random_inits
+    
     all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
     all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
+
+    # TODO break into separate function
     for i in range(num_random_inits):
-        perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
+        if no_random_inits:
+            perturbed_y = y.clone()
+        else:
+            perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
         perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
         perturbed_y.requires_grad = True
         optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
@@ -155,28 +147,34 @@ def add_adversarial_noise(y,
                 perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
         all_perturbed_ys[:, i] = perturbed_y.squeeze()
         all_perturbed_rewards[:, i] = perturbed_rewards
-        # print(float(perturbed_reward))
 
     idxs = torch.argmin(all_perturbed_rewards, dim=1)
     perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
     perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     perturbed_reward = perturbed_rewards.sum()
-    
+    if not adv_backprop:
+        return perturbed_y
+
+    df_dzs = torch.zeros(Zs.shape[0], 1)
+    final_perturbed_ys = torch.zeros(y.shape[0], 1)
     for i in range(len(perturbed_y)):
-        # Differentiable part! # TODO rethink the y.clone() or detach elsewhere
+        # Differentiable part!
         Q = torch.eye(len(perturbed_y[i])) # typically Hessian, but sub for arbitrary SPD matrix
         A, b, G, h = torch.Tensor([]), torch.Tensor([]), torch.Tensor([[1]]), torch.Tensor([budget]) # constraint matrix
         perturbed_y_var = perturbed_y[i].detach().requires_grad_(True)
-        perturbed_reward_var =  problem.get_objective(perturbed_y_var, Zs[i])
+        # z_var = Zs[i].detach().requires_grad_(True)
+        perturbed_reward_var = problem.get_objective(perturbed_y_var, Zs[i])
+        # df_dzs[i] = torch.autograd.grad(perturbed_reward_var, z_var, retain_graph=True, create_graph=True)[0] 
+        # how would we incorporate df_dzs in the backward pass?
         jac = torch.autograd.grad(perturbed_reward_var, perturbed_y_var, retain_graph=True, create_graph=True)[0] 
-        # TODO: should jac have a - sign?
         p = jac - Q @ perturbed_y[i] #
 
         qp_solver = qpth.qp.QPFunction(verbose=-1)
-        # breakpoint()
         approx_y = qp_solver(Q, p, G, h, A, b)[0]
         # print(perturbed_y_var - approx_y)  # checks out, they seem close!
-    return perturbed_y
+        final_perturbed_ys[i] = approx_y
+
+    return final_perturbed_ys
 
 
 def clip(tensor, low, high):
@@ -186,11 +184,9 @@ def clip(tensor, low, high):
     tensor[too_high_mask] = high
     return tensor
 
+
 def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
-    too_low_mask = perturbed_y < low
-    too_high_mask = perturbed_y > high
-    perturbed_y[too_low_mask] = low
-    perturbed_y[too_high_mask] = high
+    perturbed_y = clip(perturbed_y, low, high)
 
     if len(perturbed_y.shape) == 3:
         batch_sz, num_channels, num_users = y.shape
