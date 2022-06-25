@@ -70,7 +70,7 @@ def find_saved_problem(
     return filename, saved_probs
 
 
-def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1, adv_backprop=False):
+def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1, adv_backprop=0):
     if isinstance(problem, Toy):
         low = problem.get_low()
         high = problem.get_high()
@@ -118,7 +118,7 @@ def add_adversarial_noise(y,
                           num_random_inits=300,
                           random_init_scale=3,
                           random_init_bias=2,
-                          adv_backprop=False,
+                          adv_backprop=0,
                          ):
     if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
     no_random_inits = num_random_inits is None
@@ -152,10 +152,10 @@ def add_adversarial_noise(y,
     perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
     perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     perturbed_reward = perturbed_rewards.sum()
-    if not adv_backprop:
+    if adv_backprop == 0:
         return perturbed_y
 
-    breakpoint()
+    # breakpoint()
     df_dzs = torch.zeros(Zs.shape[0], 1)
     final_perturbed_ys = torch.zeros(y.shape[0], 1)
     for i in range(len(perturbed_y)):
@@ -219,7 +219,7 @@ def print_metrics(
     noise_type=None,
     add_train_noise=False,
     noise_scale=0,
-    adv_backprop=False
+    adv_backprop=0
 ):
     metrics = {}
     for Xs, Ys, Ys_aux, partition in datasets:

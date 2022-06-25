@@ -238,7 +238,7 @@ if __name__ == '__main__':
     # Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
     # Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale, adv_backprop=False)
+    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale, adv_backprop=0)
 
     #   Document the value of a random guess
     objs_rand = []
