@@ -155,24 +155,26 @@ def add_adversarial_noise(y,
     if adv_backprop == 0:
         return perturbed_y
 
-    # breakpoint()
-    df_dzs = torch.zeros(Zs.shape[0], 1)
+    # df_dzs = torch.zeros(Zs.shape[0], 1)
+    # z_var = Zs[i].detach().requires_grad_(True)
+    # df_dzs[i] = torch.autograd.grad(perturbed_reward_var, z_var, retain_graph=True, create_graph=True)[0] 
+    # how would we incorporate df_dzs in the backward pass?
     final_perturbed_ys = torch.zeros(y.shape[0], 1)
     for i in range(len(perturbed_y)):
         # Differentiable part!
         Q = torch.eye(len(perturbed_y[i])) # typically Hessian, but sub for arbitrary SPD matrix
-        A, b, G, h = torch.Tensor([]), torch.Tensor([]), torch.Tensor([[1]]), torch.Tensor([budget]) # constraint matrix
-        perturbed_y_var = perturbed_y[i].detach().requires_grad_(True)
-        # z_var = Zs[i].detach().requires_grad_(True)
-        perturbed_reward_var = problem.get_objective(perturbed_y_var, Zs[i])
-        # df_dzs[i] = torch.autograd.grad(perturbed_reward_var, z_var, retain_graph=True, create_graph=True)[0] 
-        # how would we incorporate df_dzs in the backward pass?
-        jac = torch.autograd.grad(perturbed_reward_var, perturbed_y_var, retain_graph=True, create_graph=True)[0] 
-        p = jac - Q @ perturbed_y[i] #
-
+        lower_bound = abs(max(y[i] - budget, low))
+        upper_bound = abs(min(y[i] + budget, high))
+        # Gx <= b
+        A, b, G, h = torch.Tensor([]), torch.Tensor([]), torch.Tensor([[-1], [1]]), torch.Tensor([lower_bound, upper_bound]) # constraint matrix
+        y_var = y[i].requires_grad_(True)
+        perturbation_var = (perturbed_y[i].detach() - y[i]).requires_grad_(True)
+        reward_var = problem.get_objective(y_var + perturbation_var, Zs[i])
+        jac = torch.autograd.grad(reward_var, perturbation_var, retain_graph=True, create_graph=True)[0] # TODO double check
+        p = jac - Q * (y_var + perturbation_var)
         qp_solver = qpth.qp.QPFunction(verbose=-1)
         approx_y = qp_solver(Q, p, G, h, A, b)[0]
-        # print(perturbed_y_var - approx_y)  # checks out, they seem close!
+
         final_perturbed_ys[i] = approx_y
 
     return final_perturbed_ys
