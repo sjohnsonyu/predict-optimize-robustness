@@ -87,6 +87,9 @@ if __name__ == '__main__':
     parser.add_argument('--noise_type', type=str, choices=['random', 'adversarial'], default='random')
     parser.add_argument('--add_train_noise', type=int, default=0)
     parser.add_argument('--adv_backprop', type=int, default=0)
+    parser.add_argument('--test_noise_type', type=str, choices=['random', 'adversarial', None], default=None)
+    parser.add_argument('--test_noise_scale', type=float, default=0)
+
     args = parser.parse_args()
 
     # Load problem
@@ -234,11 +237,17 @@ if __name__ == '__main__':
     # Document how well this trained model does
     print("\nBenchmarking Model...")
     # Print final metrics
-    # Y_test = add_noise(Y_test, scale=args.noise_scale)
-    # Y_train = add_noise(Y_train, scale=args.noise_scale) if args.add_train_noise else Y_train
-    # Y_val = add_noise(Y_val, scale=args.noise_scale) if args.add_train_noise else Y_val
     datasets = [(X_train, Y_train, Y_train_aux, 'train'), (X_val, Y_val, Y_val_aux, 'val'), (X_test, Y_test, Y_test_aux, 'test')]
-    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", args.noise_type, args.add_train_noise, args.noise_scale, adv_backprop=0)
+    if args.test_noise_type is None:
+        test_noise_type = args.noise_type
+        test_noise_scale = args.noise_scale
+    else:
+        test_noise_type = args.test_noise_type
+        test_noise_scale = args.test_noise_scale
+
+    print('test_noise_type:', test_noise_type)
+    print('test_noise_scale:', test_noise_scale)
+    test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", test_noise_type, args.add_train_noise, test_noise_scale, adv_backprop=0)
 
     #   Document the value of a random guess
     objs_rand = []
@@ -260,7 +269,7 @@ if __name__ == '__main__':
                }
     # curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
     curr_dir = './'
-    with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}', 'wb') as f:
+    with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}_test_{args.test_noise_type}_{args.test_noise_scale}', 'wb') as f:
         pickle.dump(to_save, f)
 
 
