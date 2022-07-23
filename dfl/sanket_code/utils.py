@@ -123,18 +123,28 @@ def add_adversarial_noise(y,
     if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
     no_random_inits = num_random_inits is None
     num_random_inits = 1 if num_random_inits is None else num_random_inits
-    
-    all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
-    all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
+
+    if isinstance(problem, Toy):
+        all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
+        all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
+    else:
+        all_perturbed_ys = torch.zeros(y.shape[0], y.shape[1], y.shape[2], num_random_inits)
+        all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
 
     # TODO break into separate function
     for i in range(num_random_inits):
         if no_random_inits:
             perturbed_y = y.clone()
         else:
-            perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
+            if isinstance(problem, Toy):
+                perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
+            else:
+                perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape)) + random_init_bias # (want Z - Y to be smaller than offset)
+
+
         perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
         perturbed_y.requires_grad = True
+
         optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
         # optim = torch.optim.Adam([perturbed_y], lr=lr)
         for _ in range(num_iters):
@@ -145,11 +155,21 @@ def add_adversarial_noise(y,
             optim.step()
             with torch.no_grad():
                 perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
-        all_perturbed_ys[:, i] = perturbed_y.squeeze()
-        all_perturbed_rewards[:, i] = perturbed_rewards
+
+        if isinstance(problem, Toy):
+            all_perturbed_ys[:, i] = perturbed_y.squeeze()
+            all_perturbed_rewards[:, i] = perturbed_rewards
+        else:
+            all_perturbed_ys[:, :, :, i] = perturbed_y
+            all_perturbed_rewards[:, i] = perturbed_rewards
+
 
     idxs = torch.argmin(all_perturbed_rewards, dim=1)
-    perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
+    if isinstance(problem, Toy):
+        perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
+    else:
+        perturbed_y = all_perturbed_ys[range(len(idxs)), :, :, idxs]
+
     perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     perturbed_reward = perturbed_rewards.sum()
     if adv_backprop == 0:
@@ -190,17 +210,24 @@ def clip(tensor, low, high):
 
 def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
     perturbed_y = clip(perturbed_y, low, high)
-
     if len(perturbed_y.shape) == 3:
         batch_sz, num_channels, num_users = y.shape
-        perturbed_y = perturbed_y.reshape(batch_sz, num_channels * num_users)
-        y = y.reshape(batch_sz, num_channels * num_users)
-        perturbation = (perturbed_y - y).reshape(batch_sz, num_channels * num_users)
-        perturbation_norm = torch.norm(perturbation, p=norm, dim=1)
-        mask = perturbation_norm > budget
-        if sum(mask) > 0:
-            perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
-        return perturbed_y.reshape(batch_sz, num_channels, num_users)
+        for i in range(batch_sz):
+            perturbation = (perturbed_y[i] - y[i])
+            perturbation_norm = torch.norm(perturbation.flatten(), p=norm)
+            if perturbation_norm > budget:
+                perturbed_y[i] = perturbed_y[i] - perturbation + perturbation / perturbation_norm * budget
+        # buggy: reshape kills the gradient!
+        # breakpoint()
+        # perturbed_y = perturbed_y.reshape(batch_sz, num_channels * num_users)
+        # y = y.reshape(batch_sz, num_channels * num_users)
+        # perturbation = (perturbed_y - y).reshape(batch_sz, num_channels * num_users)
+        # perturbation_norm = torch.norm(perturbation, p=norm, dim=1)
+        # mask = perturbation_norm > budget
+        # if sum(mask) > 0:
+        #     perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
+        # return perturbed_y.reshape(batch_sz, num_channels, num_users)
+        return perturbed_y
     elif len(perturbed_y.shape) == 2:
         perturbation = perturbed_y - y
         perturbation_norm = torch.norm(perturbation, p=norm, dim=1)

@@ -209,7 +209,7 @@ if __name__ == '__main__':
             metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale, args.adv_backprop)
 
             # Save model if it's the best one
-            if best[1] is None or metrics['val']['loss'] < best[0]:
+            if best[1] is None or metrics['val']['loss'] < best[0]:  # TODO: re-examine this
                 best = (metrics['val']['loss'], deepcopy(model))
                 time_since_best = 0
 
