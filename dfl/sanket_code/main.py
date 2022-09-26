@@ -5,6 +5,8 @@ import sys
 import pickle
 import numpy as np
 
+
+
 # Makes sure hashes are consistent
 hashseed = os.getenv('PYTHONHASHSEED')
 if not hashseed:
@@ -25,18 +27,18 @@ from Toy import Toy
 from BudgetAllocation import BudgetAllocation
 #from BipartiteMatching import BipartiteMatching
 #from PortfolioOpt import PortfolioOpt
+from BabyPortfolioOpt import BabyPortfolioOpt
 from RMAB import RMAB
 from CubicTopK import CubicTopK
 from models import model_dict
 from losses import MSE, get_loss_fn
 from utils import print_metrics, init_if_not_saved, move_to_gpu, add_noise
 
-
 if __name__ == '__main__':
     # Get hyperparams from the command line
     # TODO: Separate main into folders per domain
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio', 'toy'], default='portfolio')
+    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio', 'toy', 'babyportfolio'], default='portfolio')
     parser.add_argument('--loadnew', type=ast.literal_eval, default=False)
     parser.add_argument('--layers', type=int, default=2)
     parser.add_argument('--iters', type=int, default=5000)
@@ -72,6 +74,8 @@ if __name__ == '__main__':
     #   Domain-specific: PortfolioOptimization
     parser.add_argument('--stocks', type=int, default=50)
     parser.add_argument('--stockalpha', type=float, default=0.1)
+    # Baby
+    parser.add_argument('--x_dim', type=int, default=10)
     #   Decision-Focused Learning
     parser.add_argument('--dflalpha', type=float, default=0.0)
     #   Learned-Loss
@@ -151,7 +155,15 @@ if __name__ == '__main__':
                             'val_frac': args.valfrac,
                             'rand_seed': args.seed,}
   #      problem = init_problem(PortfolioOpt, problem_kwargs)
-
+    elif args.problem == 'babyportfolio':
+        problem_kwargs =    {'num_train_instances': args.instances,
+                            'num_test_instances': args.testinstances,
+                            'x_dim': args.x_dim,
+                            'num_stocks': args.stocks,
+                            'alpha': args.stockalpha,
+                            'val_frac': args.valfrac,
+                            'rand_seed': args.seed}
+        problem = init_problem(BabyPortfolioOpt, problem_kwargs)
 
     # Load a loss function to train the ML model on
     #   TODO: Figure out loss function "type" for mypy type checking. Define class/interface?
@@ -249,6 +261,8 @@ if __name__ == '__main__':
     print('test_noise_scale:', test_noise_scale)
     test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", test_noise_type, args.add_train_noise, test_noise_scale, adv_backprop=0)
 
+    if isinstance(problem, BabyPortfolioOpt):
+        perturbed_Y_test = perturbed_Y_test.type_as(Y_test_aux)
     #   Document the value of a random guess
     objs_rand = []
     for _ in range(10):
@@ -258,6 +272,7 @@ if __name__ == '__main__':
     print(f"\nRandom Decision Quality: {torch.stack(objs_rand).mean().item()}")
 
     #   Document the optimal value
+
     Z_test_opt = problem.get_decision(perturbed_Y_test, aux_data=Y_test_aux, isTrain=False)
     objectives = problem.get_objective(perturbed_Y_test, Z_test_opt, aux_data=Y_test_aux)
     print(f"Optimal Decision Quality: {objectives.mean().item()}")

@@ -10,7 +10,10 @@ from itertools import repeat
 from scipy import optimize, rand
 import numpy as np
 from Toy import Toy
+from BabyPortfolioOpt import BabyPortfolioOpt
+from BudgetAllocation import BudgetAllocation
 import qpth
+
 
 def init_if_not_saved(
     problem_cls,
@@ -70,10 +73,13 @@ def find_saved_problem(
     return filename, saved_probs
 
 
-def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1, adv_backprop=0):
+def add_noise(y, problem, Zs, aux_data=None, scale=0, noise_type='random', low=0, high=1, adv_backprop=0):
     if isinstance(problem, Toy):
         low = problem.get_low()
         high = problem.get_high()
+    elif isinstance(problem, BabyPortfolioOpt):
+        low = None
+        high = None
     else:
         low = 0
         high = 1
@@ -82,25 +88,28 @@ def add_noise(y, problem, Zs, scale=0, noise_type='random', low=0, high=1, adv_b
         return add_random_noise(torch.clone(y), scale, low=low, high=high)
     elif noise_type == 'adversarial':
         # NOTE: I removed the y.clone() here, want to sanity check
-        return add_adversarial_noise(y, problem, Zs, budget=scale, low=low, high=high, adv_backprop=adv_backprop)
+        return add_adversarial_noise(y, problem, Zs, aux_data=aux_data, budget=scale, low=low, high=high, adv_backprop=adv_backprop)
     else:
         raise Exception("noise type is not valid. please select either random or adversarial")
 
 
 def add_random_noise(y, scale, low=0, high=1):
+    skip_clipping = low is None or high is None
     if isinstance(y, torch.Tensor) and len(y.shape) == 3:
         batch_sz, num_channels, num_users = y.shape
         noise = np.random.randn(batch_sz, num_channels, num_users) * scale
         noisy_y = y + noise
-        noisy_y[noisy_y > high] = high
-        noisy_y[noisy_y < low] = low
+        noisy_y = clip(noisy_y, low, high) if not skip_clipping else noisy_y
+        # noisy_y[noisy_y > high] = high
+        # noisy_y[noisy_y < low] = low
         return noisy_y
     elif isinstance(y, torch.Tensor) and len(y.shape) == 2:
         batch_sz, num_dims = y.shape
         noise = np.random.randn(batch_sz, num_dims) * scale
         noisy_y = y + noise
-        noisy_y[noisy_y > high] = high
-        noisy_y[noisy_y < low] = low
+        noisy_y = clip(noisy_y, low, high) if not skip_clipping else noisy_y
+        # noisy_y[noisy_y > high] = high
+        # noisy_y[noisy_y < low] = low
         return noisy_y
     else:
         return y
@@ -109,9 +118,12 @@ def add_random_noise(y, scale, low=0, high=1):
 def add_adversarial_noise(y,
                           problem,
                           Zs,
+                          aux_data=None,
                           budget=100,
                           lr=1e-2,
-                          norm=1,
+                        #   norm=float('inf'),
+                        #   norm=1,
+                          norm=2,
                           num_iters=30,
                           low=0,
                           high=1,
@@ -120,14 +132,19 @@ def add_adversarial_noise(y,
                           random_init_bias=2,
                           adv_backprop=0,
                          ):
-    if not isinstance(y, torch.Tensor) or (len(y.shape) != 3 and not isinstance(problem, Toy)): return y
+    if not isinstance(y, torch.Tensor): return y
+    if isinstance(problem, BudgetAllocation) and len(y.shape) != 3: return y
+
     no_random_inits = num_random_inits is None
     num_random_inits = 1 if num_random_inits is None else num_random_inits
 
     if isinstance(problem, Toy):
         all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
         all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
-    else:
+    elif isinstance(problem, BabyPortfolioOpt):
+        all_perturbed_ys = torch.zeros(y.shape[0], y.shape[1], num_random_inits)
+        all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
+    else:  # budget allocation
         all_perturbed_ys = torch.zeros(y.shape[0], y.shape[1], y.shape[2], num_random_inits)
         all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
 
@@ -141,14 +158,13 @@ def add_adversarial_noise(y,
             else:
                 perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape)) + random_init_bias # (want Z - Y to be smaller than offset)
 
-
         perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
         perturbed_y.requires_grad = True
 
         optim = torch.optim.SGD([perturbed_y], lr=lr, momentum=0.99)
-        # optim = torch.optim.Adam([perturbed_y], lr=lr)
+
         for _ in range(num_iters):
-            perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+            perturbed_rewards = problem.get_objective(perturbed_y, Zs, aux_data)
             perturbed_reward = perturbed_rewards.sum()
             optim.zero_grad()
             perturbed_reward.backward()
@@ -159,6 +175,9 @@ def add_adversarial_noise(y,
         if isinstance(problem, Toy):
             all_perturbed_ys[:, i] = perturbed_y.squeeze()
             all_perturbed_rewards[:, i] = perturbed_rewards
+        elif isinstance(problem, BabyPortfolioOpt):
+            all_perturbed_ys[:, :, i] = perturbed_y
+            all_perturbed_rewards[:, i] = perturbed_rewards
         else:
             all_perturbed_ys[:, :, :, i] = perturbed_y
             all_perturbed_rewards[:, i] = perturbed_rewards
@@ -167,10 +186,16 @@ def add_adversarial_noise(y,
     idxs = torch.argmin(all_perturbed_rewards, dim=1)
     if isinstance(problem, Toy):
         perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
+        perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+    elif isinstance(problem, BabyPortfolioOpt):
+        perturbed_y = all_perturbed_ys[range(len(idxs)), :, idxs]
+        perturbed_rewards = problem.get_objective(perturbed_y, Zs, aux_data)
     else:
         perturbed_y = all_perturbed_ys[range(len(idxs)), :, :, idxs]
+        perturbed_rewards = problem.get_objective(perturbed_y, Zs)
 
-    perturbed_rewards = problem.get_objective(perturbed_y, Zs)
+
+    # perturbed_rewards = problem.get_objective(perturbed_y, Zs, aux_data)
     perturbed_reward = perturbed_rewards.sum()
     if adv_backprop == 0:
         return perturbed_y
@@ -189,7 +214,7 @@ def add_adversarial_noise(y,
         A, b, G, h = torch.Tensor([]), torch.Tensor([]), torch.Tensor([[-1], [1]]), torch.Tensor([lower_bound, upper_bound]) # constraint matrix
         y_var = y[i].requires_grad_(True)
         perturbation_var = (perturbed_y[i].detach() - y[i]).requires_grad_(True)
-        reward_var = problem.get_objective(y_var + perturbation_var, Zs[i])
+        reward_var = problem.get_objective(y_var + perturbation_var, Zs[i], aux_data[i])
         jac = torch.autograd.grad(reward_var, perturbation_var, retain_graph=True, create_graph=True)[0] # TODO double check
         p = jac - Q * (y_var + perturbation_var)
         qp_solver = qpth.qp.QPFunction(verbose=-1)
@@ -209,16 +234,24 @@ def clip(tensor, low, high):
 
 
 def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
-    perturbed_y = clip(perturbed_y, low, high)
+    skip_clipping = low is None or high is None
+    perturbed_y = clip(perturbed_y, low, high) if not skip_clipping else perturbed_y
     if len(perturbed_y.shape) == 3:
         batch_sz, num_channels, num_users = y.shape
         for i in range(batch_sz):
             perturbation = (perturbed_y[i] - y[i])
+
             perturbation_norm = torch.norm(perturbation.flatten(), p=norm)
             if perturbation_norm > budget:
-                perturbed_y[i] = perturbed_y[i] - perturbation + perturbation / perturbation_norm * budget
+                # FIXME: I'm confused... should the 0.1 be spread across? I think that's how
+                # we did it previously, but that's not in line with the proj inf.
+                if norm == float('inf'):
+                    perturbation = clip(perturbation, -budget, budget)
+                    perturbed_y[i] = y[i] + perturbation
+                elif norm == 1:  # should this be norm == 2?
+                    perturbed_y[i] = perturbed_y[i] - perturbation + perturbation / perturbation_norm * budget
+                # perturbed_y[i] = clip(perturbed_y[i], low, high)
         # buggy: reshape kills the gradient!
-        # breakpoint()
         # perturbed_y = perturbed_y.reshape(batch_sz, num_channels * num_users)
         # y = y.reshape(batch_sz, num_channels * num_users)
         # perturbation = (perturbed_y - y).reshape(batch_sz, num_channels * num_users)
@@ -227,14 +260,23 @@ def projection(perturbed_y, y, budget=1, norm=1, low=0, high=1):
         # if sum(mask) > 0:
         #     perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
         # return perturbed_y.reshape(batch_sz, num_channels, num_users)
+
         return perturbed_y
     elif len(perturbed_y.shape) == 2:
         perturbation = perturbed_y - y
         perturbation_norm = torch.norm(perturbation, p=norm, dim=1)
-        mask = perturbation_norm > budget
-        if sum(mask) > 0:
-            # print('touching budget')
-            perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
+        if norm == 1:
+            mask = perturbation_norm > budget
+            if sum(mask) > 0:  # FIXME: is this even correct to do??
+                perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
+        elif norm == 2:
+            mask = perturbation_norm > budget
+            if sum(mask) > 0:
+                perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + perturbation[mask] / perturbation_norm[mask].unsqueeze(1) * budget
+        elif norm == float('inf'):
+            # or y + clip(perturbation)... don't know what we need for gradient
+            mask = torch.logical_or(perturbation_norm > budget, perturbation_norm < -budget)
+            perturbed_y[mask] = perturbed_y[mask] - perturbation[mask] + clip(perturbation, -budget, budget)[mask]
         return perturbed_y
 
 
@@ -258,9 +300,10 @@ def print_metrics(
         pred = model(Xs).squeeze()
         if isinstance(problem, Toy):  # this is a hack; toy is the only domain with preds of dim 1
             pred = pred.unsqueeze(1)
+
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
         if partition == 'test' or add_train_noise:
-            Ys = add_noise(Ys, problem, Zs_pred.detach(), scale=noise_scale, noise_type=noise_type, adv_backprop=adv_backprop)
+            Ys = add_noise(Ys, problem, Zs_pred.detach(), aux_data=Ys_aux, scale=noise_scale, noise_type=noise_type, adv_backprop=adv_backprop)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)
 
         # Loss and Error
