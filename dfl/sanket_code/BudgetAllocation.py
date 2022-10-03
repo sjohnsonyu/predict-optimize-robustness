@@ -5,6 +5,8 @@ import numpy as np
 from SubmodularOptimizer import SubmodularOptimizer
 import torch
 
+W = torch.Tensor([[20, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
 
 class BudgetAllocation(PThenO):
     """The budget allocation predict-then-optimise problem from Wilder et. al. (2019)"""
@@ -64,6 +66,7 @@ class BudgetAllocation(PThenO):
         # Undo random seed setting
         self._set_seed()
 
+
     def _load_instances(self, num_instances, num_items, num_targets):
         """
         Loads the labels (Ys) of the prediction from a file, and returns a subset of it parameterised by instances.
@@ -71,10 +74,13 @@ class BudgetAllocation(PThenO):
         # Load the dataset
         # curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
         curr_dir = './'
+        # with open(f'{curr_dir}/data/dummy_0.3.pickle', 'rb') as f:
         with open(f'{curr_dir}/data/budget_allocation_data.pickle', 'rb') as f:
             Yfull, _ = pickle.load(f, encoding='bytes')
-        Yfull = np.array(Yfull)
 
+        Yfull = np.array(Yfull)
+        # print('Setting dummy data')
+        # Yfull = np.full(Yfull.shape, 0.3)  # TODO remove me
         # Whittle the dataset down to the right size
         def whittle(matrix, size, dim):
             assert size <= matrix.shape[dim]
@@ -130,7 +136,7 @@ class BudgetAllocation(PThenO):
     def get_twostageloss(self):
         return 'mse'
 
-    def get_objective(self, Y, Z, w=None, **kwargs):
+    def get_objective(self, Y, Z, w=W, **kwargs):
         """
         For a given set of predictions/labels (Y), returns the decision quality.
         The objective needs to be _maximised_.
@@ -143,13 +149,19 @@ class BudgetAllocation(PThenO):
         if w is None:
             w = torch.ones(Y.shape[-1]).requires_grad_(False)
         else:
-            assert Y.shape[-1] == w.shape[0]
-            assert len(w.shape) == 1
-
+            # assert Y.shape[-1] == w.shape[0]
+            # assert len(w.shape) == 1
+            pass
         # Calculate objective
         p_fail = 1 - Z.unsqueeze(-1) * Y
         p_all_fail = p_fail.prod(dim=-2)
-        obj = (w * (1 - p_all_fail)).sum(dim=-1)
+
+        if len(Y.shape) > 2:
+            w = w.repeat(Y.shape[0], 1, 1)
+
+        obj = (Z.unsqueeze(-1) * Y * w).sum() # added term to capture user/channel value
+        # obj = (w * (1 - p_all_fail)).sum(dim=-1)
+        # obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum() # added term to capture user/channel value
         return obj
 
     def get_decision(self, Y, Z_init=None, **kwargs):
