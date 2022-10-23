@@ -4,7 +4,7 @@ import os
 import sys
 import pickle
 import numpy as np
-
+from optmirror import OptMirrorAdam
 
 
 # Makes sure hashes are consistent
@@ -194,6 +194,7 @@ if __name__ == '__main__':
     )
     # model.load_state_dict(torch.load(f'best_model_{args.loss}'))
     # model.eval()
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Train neural network with a given loss function
