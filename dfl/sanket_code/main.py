@@ -4,6 +4,7 @@ import os
 import sys
 import pickle
 import numpy as np
+
 from optmirror import OptMirrorAdam
 
 
@@ -114,7 +115,8 @@ if __name__ == '__main__':
         problem_kwargs =    {'num_train_instances': args.instances,
                             'num_test_instances': args.testinstances,
                             'rand_seed': args.seed,
-                            'val_frac': args.valfrac,}
+                            'val_frac': args.valfrac,
+                            'x_dim': args.x_dim,}
         problem = init_problem(Toy, problem_kwargs)
 
     elif args.problem == 'cubic':
@@ -194,7 +196,7 @@ if __name__ == '__main__':
     )
     # model.load_state_dict(torch.load(f'best_model_{args.loss}'))
     # model.eval()
-    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = OptMirrorAdam(model.parameters(), lr=args.lr, betas=(0.0,0.9))
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # Train neural network with a given loss function
@@ -209,7 +211,6 @@ if __name__ == '__main__':
     X_train, Y_train, Y_train_aux = problem.get_train_data()
     X_val, Y_val, Y_val_aux = problem.get_val_data()
     X_test, Y_test, Y_test_aux = problem.get_test_data()
-
     best = (float("inf"), None)
     time_since_best = 0
     for iter_idx in range(args.iters):
@@ -218,6 +219,7 @@ if __name__ == '__main__':
         # Check metrics on val set
         if iter_idx % args.valfreq == 0:
             # Compute metrics
+            # breakpoint()
             datasets = [(X_train, Y_train_epoch, Y_train_aux, 'train'), (X_val, Y_val_epoch, Y_val_aux, 'val')]
             metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale, args.adv_backprop)
 
@@ -231,17 +233,34 @@ if __name__ == '__main__':
                 break
 
         # Learn
-        losses = []
-        for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
-            pred = model(X_train[i])
-            if not isinstance(problem, Toy):
-                pred = pred.squeeze()
-            losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
-        loss = torch.stack(losses).mean()
+        # losses = []
+        # for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
+        #     pred = model(X_train[i])
+        #     if not isinstance(problem, Toy):
+        #         pred = pred.squeeze()
+        #     losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
+        # loss = torch.stack(losses).mean()
+
+        loss = metrics['train']['loss_live']
 
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+
+        def closure():
+            model.zero_grad()
+            losses = []
+            for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
+                pred = model(X_train[i])
+                if not isinstance(problem, Toy):
+                    pred = pred.squeeze()
+                losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
+            loss = torch.stack(losses).mean()
+            return loss
+
+        if isinstance(optimizer, OptMirrorAdam):
+            optimizer.step(closure)
+        else:
+            optimizer.step()
         time_since_best += 1
 
     if args.earlystopping:

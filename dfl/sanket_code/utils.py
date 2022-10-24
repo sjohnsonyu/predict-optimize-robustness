@@ -305,28 +305,27 @@ def print_metrics(
         if partition == 'test' or add_train_noise:
             Ys = add_noise(Ys, problem, Zs_pred.detach(), aux_data=Ys_aux, scale=noise_scale, noise_type=noise_type, adv_backprop=adv_backprop)
         objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)  # TODO pass in 0 for Q
-        # if partition == 'train':
-        #     breakpoint()
 
         # Loss and Error
-        if partition!='test':
-            losses = []
-            for i in range(len(Xs)):
-                # Surrogate Loss
-                pred = model(Xs[i])
-                if not isinstance(problem, Toy):
-                    pred = pred.squeeze()
-                losses.append(loss_fn(pred, Ys[i], aux_data=Ys_aux[i], partition=partition, index=i))
-            losses = torch.stack(losses).flatten()
-        else:
-            losses = torch.zeros_like(objectives)
+        # if partition!='test':
+        losses = []
+        for i in range(len(Xs)):
+            # Surrogate Loss
+            pred = model(Xs[i])
+            if not isinstance(problem, Toy):
+                pred = pred.squeeze()
+            losses.append(loss_fn(pred, Ys[i], aux_data=Ys_aux[i], partition=partition, index=i))
+        losses = torch.stack(losses).flatten()
+        # else:
+        #     losses = torch.zeros_like(objectives)
 
         # Print
         objective = objectives.mean().item()
         loss = losses.mean().item()
+        loss_live = losses.mean()
         mae = torch.nn.L1Loss()(losses, -objectives).item()
         print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
-        metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae}
+        metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae, 'loss_live': loss_live}
 
     return metrics, Ys
 

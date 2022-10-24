@@ -16,11 +16,13 @@ class Toy(PThenO):
         num_test_instances=100,  # number of instances to use from the dataset to test
         val_frac=0.2,  # fraction of training data reserved for validation
         rand_seed=0,  # for reproducibility
+        x_dim=3
     ):
         super(Toy, self).__init__()
         # Do some random seed fu
         self.rand_seed = rand_seed
         self._set_seed(self.rand_seed)
+        self.x_dim = x_dim
         train_seed, test_seed = random.randrange(2**32), random.randrange(2**32)
         # Load train and test labels
         self.num_train_instances = num_train_instances
@@ -39,7 +41,9 @@ class Toy(PThenO):
         self.Ys_train, self.Ys_test = (*Ys_train_test,)
 
         # dummy data: X = Y
-        self.Xs_train, self.Xs_test = self.Ys_train, self.Ys_test
+        # self.Xs_train, self.Xs_test = self.Ys_train, self.Ys_test
+        
+        self.Xs_train, self.Xs_test = self._generate_features(self.Ys_train), self._generate_features(self.Ys_test)
         assert not (torch.isnan(self.Xs_train).any() or torch.isnan(self.Xs_test).any())
 
         # Split training data into train/val
@@ -84,6 +88,24 @@ class Toy(PThenO):
         Ys = whittle(Yfull, num_instances, 0)
         return torch.from_numpy(Ys).float().detach()
 
+    def _generate_features(self, Ys):
+        """
+        Converts labels (Ys) + random noise, to features (Xs)
+        """
+        # Generate random matrix common to all Ysets (train + test)
+        # FIXME 
+        self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1, self.x_dim))  # TODO double check this!
+        # Generate training data by scrambling the Ys based on this matrix
+        # Normalise data across the last dimension
+        Ys_mean = Ys.mean(dim=0)
+        Ys_std = Ys.std(dim=0)
+        Ys_standardised = (Ys - Ys_mean) / (Ys_std + 1e-10)
+
+        # Encode Ys as features by multiplying them with a random matrix
+        Xs = self.feature_generator(Ys_standardised.flatten().unsqueeze(1)).detach()
+        # Xs = Xs.reshape(len(Ys), self.x_dim)
+        return Xs
+
     def get_train_data(self):
         return self.Xs_train[self.train_idxs], self.Ys_train[self.train_idxs],  [None for _ in range(len(self.train_idxs))]
 
@@ -93,8 +115,9 @@ class Toy(PThenO):
     def get_test_data(self):
         return self.Xs_test, self.Ys_test,  [None for _ in range(len(self.Ys_test))]
 
+
     def get_modelio_shape(self):
-        return 1, 1  # x, y dims
+        return self.x_dim, 1  # x, y dims
     
     def get_output_activation(self):
         return None
