@@ -185,7 +185,7 @@ def add_adversarial_noise(y,
     # all_perturbed_ys = all_perturbed_ys
     idxs = torch.argmin(all_perturbed_rewards, dim=1)
     if isinstance(problem, Toy):
-        perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1)
+        perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1).detach()
         perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     elif isinstance(problem, BabyPortfolioOpt):
         perturbed_y = all_perturbed_ys[range(len(idxs)), :, idxs].detach()

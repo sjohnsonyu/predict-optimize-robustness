@@ -219,7 +219,6 @@ if __name__ == '__main__':
         # Check metrics on val set
         if iter_idx % args.valfreq == 0:
             # Compute metrics
-            # breakpoint()
             datasets = [(X_train, Y_train_epoch, Y_train_aux, 'train'), (X_val, Y_val_epoch, Y_val_aux, 'val')]
             metrics, _ = print_metrics(datasets, model, problem, args.loss, loss_fn, f"Iter {iter_idx},", args.noise_type, args.add_train_noise, args.noise_scale, args.adv_backprop)
 
@@ -232,19 +231,19 @@ if __name__ == '__main__':
             if args.earlystopping and time_since_best > args.patience:
                 break
 
-        # Learn
-        # losses = []
-        # for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
-        #     pred = model(X_train[i])
-        #     if not isinstance(problem, Toy):
-        #         pred = pred.squeeze()
-        #     losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
-        # loss = torch.stack(losses).mean()
+            # Learn
+            # losses = []
+            # for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
+            #     pred = model(X_train[i])
+            #     if not isinstance(problem, Toy):
+            #         pred = pred.squeeze()
+            #     losses.append(loss_fn(pred, Y_train_epoch[i], aux_data=Y_train_aux[i], partition='train', index=i))
+            # loss = torch.stack(losses).mean()
 
-        loss = metrics['train']['loss_live']
+            loss = metrics['train']['loss_live']
 
-        optimizer.zero_grad()
-        loss.backward()
+            optimizer.zero_grad()
+            loss.backward()
 
         def closure():
             model.zero_grad()
