@@ -191,7 +191,7 @@ def add_adversarial_noise(y,
         perturbed_y = all_perturbed_ys[range(len(idxs)), :, idxs].detach()
         perturbed_rewards = problem.get_objective(perturbed_y, Zs, aux_data)  # TODO pass in 0
     else:
-        perturbed_y = all_perturbed_ys[range(len(idxs)), :, :, idxs]
+        perturbed_y = all_perturbed_ys[range(len(idxs)), :, :, idxs].detach()
         perturbed_rewards = problem.get_objective(perturbed_y, Zs)
 
 
