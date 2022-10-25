@@ -39,11 +39,13 @@ class Toy(PThenO):
             # Save Xs and Ys
             Ys_train_test.append(Ys)
         self.Ys_train, self.Ys_test = (*Ys_train_test,)
+        train_idxs = np.arange(len(self.Ys_train))
+        test_idxs = np.arange(len(self.Ys_train), len(self.Ys_train) + len(self.Ys_test))
+        self.Ys = torch.cat((self.Ys_train, self.Ys_test))
+        self.Xs = self._generate_features(self.Ys)
 
-        # dummy data: X = Y
         # self.Xs_train, self.Xs_test = self.Ys_train, self.Ys_test
-        
-        self.Xs_train, self.Xs_test = self._generate_features(self.Ys_train), self._generate_features(self.Ys_test)
+        self.Xs_train, self.Xs_test = self.Xs[train_idxs], self.Xs[test_idxs]
         assert not (torch.isnan(self.Xs_train).any() or torch.isnan(self.Xs_test).any())
 
         # Split training data into train/val
@@ -58,6 +60,8 @@ class Toy(PThenO):
         self.offset = self._get_opt_offset()
         # Undo random seed setting
         # self._set_seed()
+
+
 
     def _get_opt_offset(self):
         opt_result = optimize.minimize(lambda x: -self._reward_function(x), 0)  # maximize
