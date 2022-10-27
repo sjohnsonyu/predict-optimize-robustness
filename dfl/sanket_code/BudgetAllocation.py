@@ -7,8 +7,9 @@ import torch
 
 # W = torch.Tensor([[20, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 #                   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-W = torch.Tensor([[20, 0, 0, 0, 0],
-                  [1, 1, 1, 1, 1]])
+# W = torch.Tensor([[100, 1, 1, 1, 1],
+#                   [10, 10, 10, 10, 10]])
+W = torch.Tensor([100, 1, 1, 1, 1])
 
 class BudgetAllocation(PThenO):
     """The budget allocation predict-then-optimise problem from Wilder et. al. (2019)"""
@@ -155,18 +156,20 @@ class BudgetAllocation(PThenO):
             # assert len(w.shape) == 1
             pass
         # Calculate objective
-        p_fail = 1 - Z.unsqueeze(-1) * Y
-        p_all_fail = p_fail.prod(dim=-2)
+        # breakpoint()
+        p_fail = 1 - Z.unsqueeze(-1) * Y  # (b, c, u)
+        p_all_fail = p_fail.prod(dim=-2)  # (b, u)
 
+        # if len(Y.shape) > 2:
+        #     w = w.repeat(Y.shape[0], 1, 1)
 
-        if len(Y.shape) > 2:
-            w = w.repeat(Y.shape[0], 1, 1)
-
+        # breakpoint()
+        # obj = (w*Z.unsqueeze(-1) * (1 - p_all_fail)).sum(dim=-1)
+        obj = (w * (1 - p_all_fail)).sum(dim=-1)
 
         # obj = (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
         # obj = ((1 - p_all_fail)).sum(dim=-1)
-        # obj = (w * (1 - p_all_fail)).sum(dim=-1)
-        obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
+        # obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
         return obj
 
     def get_decision(self, Y, Z_init=None, **kwargs):
