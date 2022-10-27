@@ -5,8 +5,10 @@ import numpy as np
 from SubmodularOptimizer import SubmodularOptimizer
 import torch
 
-W = torch.Tensor([[20, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                  [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+# W = torch.Tensor([[20, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#                   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+W = torch.Tensor([[20, 0, 0, 0, 0],
+                  [1, 1, 1, 1, 1]])
 
 class BudgetAllocation(PThenO):
     """The budget allocation predict-then-optimise problem from Wilder et. al. (2019)"""
@@ -18,7 +20,7 @@ class BudgetAllocation(PThenO):
         num_targets=10,  # number of items to choose from
         num_items=5,  # number of targets to consider
         budget=2,  # number of items that can be picked
-        num_fake_targets=500,  # number of random features added to make the task harder
+        num_fake_targets=0,  # number of random features added to make the task harder
         val_frac=0.2,  # fraction of training data reserved for validation
         rand_seed=0,  # for reproducibility
     ):
@@ -156,12 +158,15 @@ class BudgetAllocation(PThenO):
         p_fail = 1 - Z.unsqueeze(-1) * Y
         p_all_fail = p_fail.prod(dim=-2)
 
+
         if len(Y.shape) > 2:
             w = w.repeat(Y.shape[0], 1, 1)
 
-        obj = (Z.unsqueeze(-1) * Y * w).sum() # added term to capture user/channel value
+
+        # obj = (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
+        # obj = ((1 - p_all_fail)).sum(dim=-1)
         # obj = (w * (1 - p_all_fail)).sum(dim=-1)
-        # obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum() # added term to capture user/channel value
+        obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
         return obj
 
     def get_decision(self, Y, Z_init=None, **kwargs):
