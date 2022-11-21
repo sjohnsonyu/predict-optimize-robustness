@@ -16,7 +16,8 @@ class Toy(PThenO):
         num_test_instances=100,  # number of instances to use from the dataset to test
         val_frac=0.2,  # fraction of training data reserved for validation
         rand_seed=0,  # for reproducibility
-        x_dim=3
+        x_dim=5,
+        num_fake_targets=9
     ):
         super(Toy, self).__init__()
         # Do some random seed fu
@@ -27,6 +28,7 @@ class Toy(PThenO):
         # Load train and test labels
         self.num_train_instances = num_train_instances
         self.num_test_instances = num_test_instances
+        self.num_fake_targets = num_fake_targets
         Ys_train_test = []
         for seed, num_instances in zip([train_seed, test_seed], [num_train_instances, num_test_instances]):
             # Set seed for reproducibility
@@ -97,16 +99,19 @@ class Toy(PThenO):
         Converts labels (Ys) + random noise, to features (Xs)
         """
         # Generate random matrix common to all Ysets (train + test)
-        # FIXME 
-        self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1, self.x_dim))  # TODO double check this!
+
+        self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1 + self.num_fake_targets, self.x_dim))  # TODO double check this!
         # Generate training data by scrambling the Ys based on this matrix
         # Normalise data across the last dimension
         Ys_mean = Ys.mean(dim=0)
         Ys_std = Ys.std(dim=0)
         Ys_standardised = (Ys - Ys_mean) / (Ys_std + 1e-10)
+        fake_features = torch.normal(mean=torch.zeros(Ys.shape[0], self.num_fake_targets))
+        Ys_augmented = torch.cat((Ys_standardised, fake_features), dim=1)
 
         # Encode Ys as features by multiplying them with a random matrix
-        Xs = self.feature_generator(Ys_standardised.flatten().unsqueeze(1)).detach()
+        Xs = self.feature_generator(Ys_augmented).detach()
+        # Xs = self.feature_generator(Ys_standardised.flatten().unsqueeze(1)).detach()
         # Xs = Xs.reshape(len(Ys), self.x_dim)
         return Xs
 
