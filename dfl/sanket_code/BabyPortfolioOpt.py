@@ -16,6 +16,9 @@ class BabyPortfolioOpt(PThenO):
         val_frac=0.2,  # fraction of training data reserved for validating
         rand_seed=0,  # for reproducibility
         alpha=1,  # risk aversion constant
+        num_fake_targets=0,
+        synthetic_hidden_dim=16,
+        num_synthetic_layers=1
     ):
         super(BabyPortfolioOpt, self).__init__()
         # Do some random seed fu
@@ -30,6 +33,9 @@ class BabyPortfolioOpt(PThenO):
         self.Ys = None
         self.Xs = None
         self.x_dim = x_dim
+        self.hidden_dim = synthetic_hidden_dim
+        self.num_fake_targets = num_fake_targets
+        self.num_synthetic_layers = num_synthetic_layers
         self._set_dummy_data()
 
         # Split data into train/val/test
@@ -86,13 +92,34 @@ class BabyPortfolioOpt(PThenO):
     def get_twostageloss(self):
         return 'mse'
 
+    def _create_feature_generator(self):
+        layers = []
+        input_size = 1 + self.num_fake_targets
+        hidden_size = self.hidden_dim
+        output_size = self.x_dim
+
+        if self.num_synthetic_layers == 1:  # no hidden layer
+            layers.append(torch.nn.Linear(input_size, output_size))
+        else:
+            layers.append(torch.nn.Linear(input_size, hidden_size))
+            layers.append(torch.nn.ReLU())
+
+            for _ in range(self.num_synthetic_layers - 2):
+                layers.append(torch.nn.Linear(hidden_size, hidden_size))
+                layers.append(torch.nn.ReLU())
+
+            layers.append(torch.nn.Linear(hidden_size, output_size))
+
+        return torch.nn.Sequential(*layers)
+
+
     def _generate_features(self, Ys):
         """
         Converts labels (Ys) + random noise, to features (Xs)
         """
         # Generate random matrix common to all Ysets (train + test)
-        # FIXME 
-        self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1, self.x_dim))  # TODO double check this!
+        # self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1, self.x_dim))  # TODO double check this!
+        self.feature_generator = self._create_feature_generator()
         # Generate training data by scrambling the Ys based on this matrix
         # Normalise data across the last dimension
         Ys_mean = Ys.mean(dim=0)
@@ -101,14 +128,17 @@ class BabyPortfolioOpt(PThenO):
         # assert not torch.isnan(Ys_standardised).any()
         # Ys_standardised = Ys.clone()
 
-
         # Add noise to the data to complicate prediction
-        # fake_features = torch.normal(mean=torch.zeros(Ys.shape[0], Ys.shape[1], num_fake_targets))
-        # Ys_augmented = torch.cat((Ys_standardised, fake_features), dim=1)
+        Ys_standardised_flattened = Ys_standardised.flatten().unsqueeze(1)
+
+        fake_features = torch.normal(mean=torch.zeros(Ys_standardised_flattened.shape[0], self.num_fake_targets))
+        Ys_augmented = torch.cat((Ys_standardised_flattened, fake_features), dim=1)
+
 
         # Encode Ys as features by multiplying them with a random matrix
-        Xs = self.feature_generator(Ys_standardised.flatten().unsqueeze(1)).detach()
+        Xs = self.feature_generator(Ys_augmented).detach()
         Xs = Xs.reshape(len(Ys), self.num_stocks, self.x_dim)
+
         return Xs
 
     def get_decision(self, Y, aux_data, max_instances_per_batch=1500, **kwargs):
@@ -119,15 +149,15 @@ class BabyPortfolioOpt(PThenO):
         # Split Y into reasonably sized chunks so that we don't run into memory issues
         # Assumption Y is only 2D at max
         assert Y.ndim <= 2
-        if Y.ndim == 2:
-            results = []
-            for start in range(0, Y.shape[0], max_instances_per_batch):
-                end = min(Y.shape[0], start + max_instances_per_batch)
-                result = self.opt(Y[start:end], sqrt_covar)[0]
-                results.append(result)
-            return torch.cat(results, dim=0)
-        else:
-            return self.opt(Y, sqrt_covar)[0]
+        # if Y.ndim == 2:
+        #     results = []
+        #     for start in range(0, Y.shape[0], max_instances_per_batch):
+        #         end = min(Y.shape[0], start + max_instances_per_batch)
+        #         result = self.opt(Y[start:end], sqrt_covar)[0]
+        #         results.append(result)
+        #     return torch.cat(results, dim=0)
+        # else:
+        return self.opt(Y, sqrt_covar)[0]
 
     def get_objective(self, Y, Z, aux_data, **kwargs):
         # TODO: look at either torch.bmm or torch.matmul

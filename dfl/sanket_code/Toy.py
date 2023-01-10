@@ -16,14 +16,18 @@ class Toy(PThenO):
         num_test_instances=100,  # number of instances to use from the dataset to test
         val_frac=0.2,  # fraction of training data reserved for validation
         rand_seed=0,  # for reproducibility
-        x_dim=5,
-        num_fake_targets=9
+        x_dim=10,
+        num_fake_targets=0,
+        synthetic_hidden_dim=16,
+        num_synthetic_layers=2
     ):
         super(Toy, self).__init__()
         # Do some random seed fu
         self.rand_seed = rand_seed
         self._set_seed(self.rand_seed)
         self.x_dim = x_dim
+        self.hidden_dim = synthetic_hidden_dim
+        self.num_synthetic_layers = num_synthetic_layers
         train_seed, test_seed = random.randrange(2**32), random.randrange(2**32)
         # Load train and test labels
         self.num_train_instances = num_train_instances
@@ -94,13 +98,35 @@ class Toy(PThenO):
         Ys = whittle(Yfull, num_instances, 0)
         return torch.from_numpy(Ys).float().detach()
 
+
+    def _create_feature_generator(self):
+        # Generate random matrix common to all Ysets (train + test)
+        layers = []
+        input_size = 1 + self.num_fake_targets
+        hidden_size = self.hidden_dim
+        output_size = self.x_dim
+
+        if self.num_synthetic_layers == 1:  # no hidden layer
+            layers.append(torch.nn.Linear(input_size, output_size))
+        else:
+            layers.append(torch.nn.Linear(input_size, hidden_size))
+            layers.append(torch.nn.ReLU())
+
+            for _ in range(self.num_synthetic_layers - 2):
+                layers.append(torch.nn.Linear(hidden_size, hidden_size))
+                layers.append(torch.nn.ReLU())
+
+            layers.append(torch.nn.Linear(hidden_size, output_size))
+
+        return torch.nn.Sequential(*layers)
+
     def _generate_features(self, Ys):
         """
         Converts labels (Ys) + random noise, to features (Xs)
         """
-        # Generate random matrix common to all Ysets (train + test)
+        # self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1 + self.num_fake_targets, self.x_dim))
+        self.feature_generator = self._create_feature_generator()
 
-        self.feature_generator = torch.nn.Sequential(torch.nn.Linear(1 + self.num_fake_targets, self.x_dim))  # TODO double check this!
         # Generate training data by scrambling the Ys based on this matrix
         # Normalise data across the last dimension
         Ys_mean = Ys.mean(dim=0)
@@ -113,6 +139,7 @@ class Toy(PThenO):
         Xs = self.feature_generator(Ys_augmented).detach()
         # Xs = self.feature_generator(Ys_standardised.flatten().unsqueeze(1)).detach()
         # Xs = Xs.reshape(len(Ys), self.x_dim)
+
         return Xs
 
     def get_train_data(self):

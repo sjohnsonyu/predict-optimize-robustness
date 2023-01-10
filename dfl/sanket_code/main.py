@@ -59,15 +59,15 @@ if __name__ == '__main__':
     parser.add_argument('--numitems', type=int, default=50)
     #   Domain-specific: BudgetAllocation
     parser.add_argument('--numtargets', type=int, default=10)
-    parser.add_argument('--fakefeatures', type=int, default=0)
+    parser.add_argument('--faketargets', type=int, default=0)
     #   Domain-specific: RMAB
     parser.add_argument('--rmabbudget', type=int, default=1)
-    parser.add_argument('--numarms', type=int, default=5)
+    parser.add_argument('--numarms', type=int, default=3)
     parser.add_argument('--gamma', type=float, default=0.9)
     parser.add_argument('--minlift', type=float, default=0.2)
-    parser.add_argument('--scramblinglayers', type=int, default=3)
-    parser.add_argument('--scramblingsize', type=int, default=64)
-    parser.add_argument('--numfeatures', type=int, default=16)
+    parser.add_argument('--scramblinglayers', type=int, default=2)
+    parser.add_argument('--scramblingsize', type=int, default=4)
+    parser.add_argument('--numfeatures', type=int, default=4)
     parser.add_argument('--noisestd', type=float, default=0.5)
     parser.add_argument('--eval', type=str, choices=['exact', 'sim'], default='exact')
     #   Domain-specific: BipartiteMatching
@@ -94,6 +94,8 @@ if __name__ == '__main__':
     parser.add_argument('--adv_backprop', type=int, default=0)
     parser.add_argument('--test_noise_type', type=str, choices=['random', 'adversarial', None], default=None)
     parser.add_argument('--test_noise_scale', type=float, default=0)
+    parser.add_argument('--synthetic_hidden_dim', type=int, default=16)
+    parser.add_argument('--num_synthetic_layers', type=int, default=2)
 
     args = parser.parse_args()
 
@@ -107,16 +109,22 @@ if __name__ == '__main__':
                             'num_targets': args.numtargets,
                             'num_items': args.numitems,
                             'budget': args.budget,
-                            'num_fake_targets': args.fakefeatures,
+                            'num_fake_targets': args.faketargets,
                             'rand_seed': args.seed,
-                            'val_frac': args.valfrac,}
+                            'val_frac': args.valfrac,
+                            'synthetic_hidden_dim': args.synthetic_hidden_dim,
+                            'num_synthetic_layers': args.num_synthetic_layers,
+                            'x_dim': args.x_dim,}
         problem = init_problem(BudgetAllocation, problem_kwargs)
     elif args.problem == 'toy':
         problem_kwargs =    {'num_train_instances': args.instances,
                             'num_test_instances': args.testinstances,
                             'rand_seed': args.seed,
                             'val_frac': args.valfrac,
-                            'x_dim': args.x_dim,}
+                            'x_dim': args.x_dim,
+                            'num_fake_targets': args.faketargets,
+                            'synthetic_hidden_dim': args.synthetic_hidden_dim,
+                            'num_synthetic_layers': args.num_synthetic_layers,}
         problem = init_problem(Toy, problem_kwargs)
 
     elif args.problem == 'cubic':
@@ -164,7 +172,10 @@ if __name__ == '__main__':
                             'num_stocks': args.stocks,
                             'alpha': args.stockalpha,
                             'val_frac': args.valfrac,
-                            'rand_seed': args.seed}
+                            'rand_seed': args.seed,
+                            'num_fake_targets': args.faketargets,
+                            'synthetic_hidden_dim': args.synthetic_hidden_dim,
+                            'num_synthetic_layers': args.num_synthetic_layers,}
         problem = init_problem(BabyPortfolioOpt, problem_kwargs)
 
     # Load a loss function to train the ML model on
@@ -207,10 +218,12 @@ if __name__ == '__main__':
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
     
+    out_filename = f'./exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}_test_{args.test_noise_type}_{args.test_noise_scale}'
     # Get data
     X_train, Y_train, Y_train_aux = problem.get_train_data()
     X_val, Y_val, Y_val_aux = problem.get_val_data()
     X_test, Y_test, Y_test_aux = problem.get_test_data()
+    # breakpoint()
     best = (float("inf"), None)
     time_since_best = 0
     for iter_idx in range(args.iters):
@@ -231,7 +244,7 @@ if __name__ == '__main__':
             if args.earlystopping and time_since_best > args.patience:
                 break
 
-            # Learn
+            # # Learn
             # losses = []
             # for i in random.sample(range(len(X_train)), min(args.batchsize, len(X_train))):
             #     pred = model(X_train[i])
@@ -243,6 +256,7 @@ if __name__ == '__main__':
             loss = metrics['train']['loss_live']
 
             optimizer.zero_grad()
+            # loss.backward()
             loss.backward()
 
         def closure():
@@ -278,6 +292,7 @@ if __name__ == '__main__':
 
     print('test_noise_type:', test_noise_type)
     print('test_noise_scale:', test_noise_scale)
+
     test_metrics, perturbed_Y_test = print_metrics(datasets, model, problem, args.loss, loss_fn, "Final", test_noise_type, args.add_train_noise, test_noise_scale, adv_backprop=0)
 
     if isinstance(problem, BabyPortfolioOpt):

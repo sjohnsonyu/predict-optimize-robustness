@@ -7,8 +7,10 @@ import torch
 
 # W = torch.Tensor([[20, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 #                   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+# W = torch.Tensor([[20, 1, 1, 1, 1],
+                #   [3, 3, 3, 3, 3]])
 W = torch.Tensor([[10, 1, 1, 1, 1],
-                  [2, 2, 2, 2, 2]])
+                  [3, 3, 3, 3, 3]])
 # W = torch.Tensor([100, 1, 1, 1, 1])
 
 class BudgetAllocation(PThenO):
@@ -24,12 +26,18 @@ class BudgetAllocation(PThenO):
         num_fake_targets=0,  # number of random features added to make the task harder
         val_frac=0.2,  # fraction of training data reserved for validation
         rand_seed=0,  # for reproducibility
+        x_dim=5,  # just for the channel
+        synthetic_hidden_dim=16,
+        num_synthetic_layers=2
     ):
         super(BudgetAllocation, self).__init__()
         # Do some random seed fu
         self.rand_seed = rand_seed
         self._set_seed(self.rand_seed)
         train_seed, test_seed = random.randrange(2**32), random.randrange(2**32)
+        self.x_dim = x_dim
+        self.hidden_dim = synthetic_hidden_dim
+        self.num_synthetic_layers = num_synthetic_layers
 
         # Load train and test labels
         self.num_train_instances = num_train_instances
@@ -46,6 +54,8 @@ class BudgetAllocation(PThenO):
             # Save Xs and Ys
             Ys_train_test.append(Ys)
         self.Ys_train, self.Ys_test = (*Ys_train_test,)
+        # self.Ys_train = torch.Tensor(np.random.random(self.Ys_train.shape))
+        # self.Ys_test = torch.Tensor(np.random.random(self.Ys_test.shape))
 
         # Generate features based on the labels
         self.num_targets = num_targets
@@ -95,12 +105,34 @@ class BudgetAllocation(PThenO):
 
         return torch.from_numpy(Ys).float().detach()
 
+    def _create_feature_generator(self):
+        layers = []
+        input_size = self.num_targets + self.num_fake_targets
+        hidden_size = self.hidden_dim
+        output_size = self.x_dim
+
+        if self.num_synthetic_layers == 1:  # no hidden layer
+            layers.append(torch.nn.Linear(input_size, output_size))
+        else:
+            layers.append(torch.nn.Linear(input_size, hidden_size))
+            layers.append(torch.nn.ReLU())
+
+            for _ in range(self.num_synthetic_layers - 2):
+                layers.append(torch.nn.Linear(hidden_size, hidden_size))
+                layers.append(torch.nn.ReLU())
+
+            layers.append(torch.nn.Linear(hidden_size, output_size))
+
+        return torch.nn.Sequential(*layers)
+
+
     def _generate_features(self, Ysets, num_fake_targets):
         """
         Converts labels (Ys) + random noise, to features (Xs)
         """
         # Generate random matrix common to all Ysets (train + test)
         transform_nn = torch.nn.Sequential(torch.nn.Linear(self.num_features, self.num_targets))
+        transform_nn = self._create_feature_generator()
 
         # Generate training data by scrambling the Ys based on this matrix
         Xsets = []
@@ -114,9 +146,14 @@ class BudgetAllocation(PThenO):
             # Add noise to the data to complicate prediction
             fake_features = torch.normal(mean=torch.zeros(Ys.shape[0], Ys.shape[1], num_fake_targets))
             Ys_augmented = torch.cat((Ys_standardised, fake_features), dim=2)
+            # breakpoint()
 
             # Encode Ys as features by multiplying them with a random matrix
-            Xs = transform_nn(Ys_augmented).detach().clone()
+            batch_sz = Ys_augmented.shape[0]
+            num_users = Ys_augmented.shape[1]
+            num_channels = Ys_augmented.shape[2]
+            Xs = transform_nn(Ys_augmented.reshape(batch_sz * num_users, num_channels)).detach()
+            Xs = Xs.reshape(batch_sz, num_users, self.x_dim).clone()
             Xsets.append(Xs)
 
         return (*Xsets,)
@@ -131,7 +168,7 @@ class BudgetAllocation(PThenO):
         return self.Xs_test, self.Ys_test,  [None for _ in range(len(self.Ys_test))]
 
     def get_modelio_shape(self):
-        return self.num_features, self.num_targets
+        return self.x_dim, self.num_targets
     
     def get_output_activation(self):
         return 'relu'
