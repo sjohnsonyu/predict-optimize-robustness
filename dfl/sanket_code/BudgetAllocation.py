@@ -192,20 +192,23 @@ class BudgetAllocation(PThenO):
             # assert Y.shape[-1] == w.shape[0]
             # assert len(w.shape) == 1
             pass
-        if len(Y.shape) > 2:
-            w = w.repeat(Y.shape[0], 1, 1)
         # Calculate objective
-        p_fail = 1 - Z.unsqueeze(-1) * Y  # (b, c, u)
-        p_fail = torch.pow(p_fail, w)
-        p_all_fail = p_fail.prod(dim=-2)  # (b, u)
-        # obj = (w * (1 - p_all_fail)).sum(dim=-1)
-        obj = (1 - p_all_fail).sum(dim=-1)
-
+        # # this is what was previously uncommented:
+        # if len(Y.shape) > 2:
+        #     w = w.repeat(Y.shape[0], 1, 1)
+        # p_fail = 1 - Z.unsqueeze(-1) * Y  # (b, c, u)
+        # p_fail = torch.pow(p_fail, w)
+        # p_all_fail = p_fail.prod(dim=-2)  # (b, u)
+        # obj = (1 - p_all_fail).sum(dim=-1)
+        # # end previously uncommented section
         # obj = (w*Z.unsqueeze(-1) * (1 - p_all_fail)).sum(dim=-1)
 
         # obj = (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1))
         # obj = ((1 - p_all_fail)).sum(dim=-1)
         # obj = (1 - p_all_fail).sum(dim=-1) + (Z.unsqueeze(-1) * Y * w).sum(dim=(-2, -1)) # added term to capture user/channel value
+        p_fail = 1 - Z.unsqueeze(-1) * Y
+        p_all_fail = p_fail.prod(dim=-2)
+        obj = (w * (1 - p_all_fail)).sum(dim=-1)
         return obj
 
     def get_decision(self, Y, Z_init=None, **kwargs):

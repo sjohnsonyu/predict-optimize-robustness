@@ -6,6 +6,7 @@ NUM_DECIMAL_PLACES = 5
 DOMAIN_TO_WEIGHTS = {'toy': DP_WEIGHTS,
                      'babyportfolio': PO_WEIGHTS,
                      'budgetalloc': BA_WEIGHTS,
+                     'toymod': DP_WEIGHTS,
                     }
 
 BASIC_COLS = ['path', 'mode', 'train_noise', 'test_noise', 'seed', 'test_dq',  'optimal_dq', 'random_dq', 'train_dq', 'val_dq']
@@ -26,19 +27,23 @@ EXP_TYPE_TO_REGEX = {'basic': BASIC_REGEX,
 DOMAIN_TO_NAME = {'toy': "Demand Prediction",
                   'babyportfolio': "Portfolio Optimization",
                   'budgetalloc': "Budget Allocation",
+                  'toymod': "Demand Prediction",
                  }
 
 DOMAIN_TO_DEFAULT_X_DIM = {'toy': 10,
                             'babyportfolio': 10,
                             'budgetalloc': 5,
+                            'toymod': 10
                           }
 DOMAIN_TO_X_DIM_OPTIONS = {'toy': [1, 2, 5, 10],
                            'babyportfolio': [2, 5, 10],
                            'budgetalloc': [2, 5, 10],
+                           'toymod': [1, 2, 5, 10]
                  }
 FAKE_TARGET_OPTIONS = [0, 5, 10, 20]
 
 DOMAIN_TO_MILD_NOISE = {'toy': 1.0,
                         'babyportfolio': 0.1,
                         'budgetalloc': 0.025,
+                        'toy': 1.0,
                        }

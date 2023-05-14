@@ -56,6 +56,11 @@ def projection(partial_perturbed_label, partial_label, budget, norm=1):
         perturbation = perturbation / perturbation_norm * budget
     return partial_label + perturbation
 
+def addAdversarialNoiseMultipleInstant(ope_simulator, w, K, label, budget, norm=1, learning_rate=1e-3, num_iterations=20, num_random_inits=30):
+    no_random_inits = num_random_inits is None
+    num_random_inits = 1 if num_random_inits is None else num_random_inits
+    all_perturbed_ys = tf.zeros((label.shape[0], label.shape[1], label.shape[2], num_random_inits))
+    all_perturbed_rewards = tf.zeros((label.shape[0], num_random_inits))
 
 def addAdversarialNoiseNew(ope_simulator, w, K, label, budget, norm=1, learning_rate=1e-3, num_iterations=20):
     partial_perturbed_label = tf.Variable(label[:,:,:,0])

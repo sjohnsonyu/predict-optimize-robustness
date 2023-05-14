@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 from Toy import Toy
+from ToyMod import ToyMod
 from BudgetAllocation import BudgetAllocation
 #from BipartiteMatching import BipartiteMatching
 #from PortfolioOpt import PortfolioOpt
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     # Get hyperparams from the command line
     # TODO: Separate main into folders per domain
     parser = argparse.ArgumentParser()
-    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio', 'toy', 'babyportfolio'], default='portfolio')
+    parser.add_argument('--problem', type=str, choices=['budgetalloc', 'bipartitematching', 'cubic', 'rmab', 'portfolio', 'toy', 'babyportfolio', 'toymod'], default='portfolio')
     parser.add_argument('--loadnew', type=ast.literal_eval, default=False)
     parser.add_argument('--layers', type=int, default=2)
     parser.add_argument('--iters', type=int, default=5000)
@@ -126,6 +127,16 @@ if __name__ == '__main__':
                             'synthetic_hidden_dim': args.synthetic_hidden_dim,
                             'num_synthetic_layers': args.num_synthetic_layers,}
         problem = init_problem(Toy, problem_kwargs)
+    elif args.problem == 'toymod':
+        problem_kwargs =    {'num_train_instances': args.instances,
+                            'num_test_instances': args.testinstances,
+                            'rand_seed': args.seed,
+                            'val_frac': args.valfrac,
+                            'x_dim': args.x_dim,
+                            'num_fake_targets': args.faketargets,
+                            'synthetic_hidden_dim': args.synthetic_hidden_dim,
+                            'num_synthetic_layers': args.num_synthetic_layers,}
+        problem = init_problem(ToyMod, problem_kwargs)
 
     elif args.problem == 'cubic':
         problem_kwargs =    {'num_train_instances': args.instances,
@@ -315,10 +326,11 @@ if __name__ == '__main__':
     to_save = {'test':  test_metrics['test']['objective'],
                'random': torch.stack(objs_rand).mean().item(),
                'optimal': objectives.mean().item(),
+               'train_mse': test_metrics['train']['mse'],
+               'val_mse': test_metrics['val']['mse'],
+               'test_mse': test_metrics['test']['mse'],
                }
     # curr_dir = '/n/home05/sjohnsonyu/predict-optimize-robustness/dfl/sanket_code'
     curr_dir = './'
     with open(f'{curr_dir}/exps/{args.problem}_{args.loss}_noise_{args.noise_scale}_seed_{args.seed}_add_train_noise_{args.add_train_noise}_test_{args.test_noise_type}_{args.test_noise_scale}', 'wb') as f:
         pickle.dump(to_save, f)
-
-

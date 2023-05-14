@@ -10,6 +10,7 @@ from itertools import repeat
 from scipy import optimize, rand
 import numpy as np
 from Toy import Toy
+from ToyMod import ToyMod
 from BabyPortfolioOpt import BabyPortfolioOpt
 from BudgetAllocation import BudgetAllocation
 import qpth
@@ -74,7 +75,7 @@ def find_saved_problem(
 
 
 def add_noise(y, problem, Zs, aux_data=None, scale=0, noise_type='random', low=0, high=1, adv_backprop=0):
-    if isinstance(problem, Toy):
+    if isinstance(problem, Toy) or isinstance(problem, ToyMod):
         low = problem.get_low()
         high = problem.get_high()
     elif isinstance(problem, BabyPortfolioOpt):
@@ -100,16 +101,12 @@ def add_random_noise(y, scale, low=0, high=1):
         noise = np.random.randn(batch_sz, num_channels, num_users) * scale
         noisy_y = y + noise
         noisy_y = clip(noisy_y, low, high) if not skip_clipping else noisy_y
-        # noisy_y[noisy_y > high] = high
-        # noisy_y[noisy_y < low] = low
         return noisy_y
     elif isinstance(y, torch.Tensor) and len(y.shape) == 2:
         batch_sz, num_dims = y.shape
         noise = np.random.randn(batch_sz, num_dims) * scale
         noisy_y = y + noise
         noisy_y = clip(noisy_y, low, high) if not skip_clipping else noisy_y
-        # noisy_y[noisy_y > high] = high
-        # noisy_y[noisy_y < low] = low
         return noisy_y
     else:
         return y
@@ -121,13 +118,12 @@ def add_adversarial_noise(y,
                           aux_data=None,
                           budget=100,
                           lr=1e-2,
-                        #   norm=float('inf'),
                           norm=1,
                         #   norm=2,
                           num_iters=30,
                           low=0,
                           high=1,
-                          num_random_inits=300,
+                          num_random_inits=10,
                           random_init_scale=3,
                           random_init_bias=2,
                           adv_backprop=0,
@@ -138,7 +134,7 @@ def add_adversarial_noise(y,
     no_random_inits = num_random_inits is None
     num_random_inits = 1 if num_random_inits is None else num_random_inits
 
-    if isinstance(problem, Toy):
+    if isinstance(problem, Toy) or isinstance(problem, ToyMod):
         all_perturbed_ys = torch.zeros(y.shape[0], num_random_inits)
         all_perturbed_rewards = torch.zeros(y.shape[0], num_random_inits)
     elif isinstance(problem, BabyPortfolioOpt):
@@ -153,7 +149,7 @@ def add_adversarial_noise(y,
         if no_random_inits:
             perturbed_y = y.clone()
         else:
-            if isinstance(problem, Toy):
+            if isinstance(problem, Toy) or isinstance(problem, ToyMod):
                 perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape[0])).unsqueeze(1) + random_init_bias # (want Z - Y to be smaller than offset)
             else:
                 perturbed_y = y.clone() + (random_init_scale * torch.randn(y.shape)) + random_init_bias # (want Z - Y to be smaller than offset)
@@ -172,7 +168,7 @@ def add_adversarial_noise(y,
             with torch.no_grad():
                 perturbed_y = projection(perturbed_y, y, budget=budget, norm=norm, low=low, high=high)
 
-        if isinstance(problem, Toy):
+        if isinstance(problem, Toy) or isinstance(problem, ToyMod):
             all_perturbed_ys[:, i] = perturbed_y.squeeze()
             all_perturbed_rewards[:, i] = perturbed_rewards
         elif isinstance(problem, BabyPortfolioOpt):
@@ -184,7 +180,7 @@ def add_adversarial_noise(y,
 
     # all_perturbed_ys = all_perturbed_ys
     idxs = torch.argmin(all_perturbed_rewards, dim=1)
-    if isinstance(problem, Toy):
+    if isinstance(problem, Toy) or isinstance(problem, ToyMod):
         perturbed_y = all_perturbed_ys[range(len(idxs)), idxs].unsqueeze(1).detach()
         perturbed_rewards = problem.get_objective(perturbed_y, Zs)
     elif isinstance(problem, BabyPortfolioOpt):
@@ -290,7 +286,8 @@ def print_metrics(
     noise_type=None,
     add_train_noise=False,
     noise_scale=0,
-    adv_backprop=0
+    adv_backprop=0,
+    out_filename=None
 ):
     metrics = {}
     for Xs, Ys, Ys_aux, partition in datasets:
@@ -298,21 +295,21 @@ def print_metrics(
         isTrain = (partition=='train') and (prefix != "Final")
         # Decision Quality
         pred = model(Xs).squeeze()
-        if isinstance(problem, Toy):  # this is a hack; toy is the only domain with preds of dim 1
+        if isinstance(problem, Toy) or isinstance(problem, ToyMod):  # this is a hack; toy is the only domain with preds of dim 1
             pred = pred.unsqueeze(1)
-
         Zs_pred = problem.get_decision(pred, aux_data=Ys_aux, isTrain=isTrain)
         if partition == 'test' or add_train_noise:
             Ys = add_noise(Ys, problem, Zs_pred.detach(), aux_data=Ys_aux, scale=noise_scale, noise_type=noise_type, adv_backprop=adv_backprop)
-        objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)  # TODO pass in 0 for Q
 
+        objectives = problem.get_objective(Ys, Zs_pred, aux_data=Ys_aux)  # TODO pass in 0 for Q
+        mse_error = (pred - Ys).square().mean()
         # Loss and Error
         # if partition!='test':
         losses = []
         for i in range(len(Xs)):
             # Surrogate Loss
             pred = model(Xs[i])
-            if not isinstance(problem, Toy):
+            if not isinstance(problem, Toy) and not isinstance(problem, ToyMod):
                 pred = pred.squeeze()
             losses.append(loss_fn(pred, Ys[i], aux_data=Ys_aux[i], partition=partition, index=i))
         losses = torch.stack(losses).flatten()
@@ -324,8 +321,8 @@ def print_metrics(
         loss = losses.mean().item()
         loss_live = losses.mean()
         mae = torch.nn.L1Loss()(losses, -objectives).item()
-        print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MAE: {mae}")
-        metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae, 'loss_live': loss_live}
+        print(f"{prefix} {partition} DQ: {objective}, Loss: {loss}, MSE: {mse_error}")
+        metrics[partition] = {'objective': objective, 'loss': loss, 'mae': mae, 'loss_live': loss_live, 'mse': mse_error}
 
     return metrics, Ys
 
